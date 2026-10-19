@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" href="icon-192.png">
 <script src="vendor/pdf.js"></script>
+<script src="vendor/echarts.min.js"></script>
 <style>
 :root {
   --bg: #f6f7f9; --card: #ffffff; --ink: #1d2330; --muted: #8a92a3; --faint: #c3c8d2;
@@ -47,6 +48,25 @@ main { padding: 4px 16px 32px; max-width: 1200px; margin: 0 auto; display: grid;
 .tile-h input[type=search]:focus { border-color: var(--accent); background: #fff; }
 .count { color: var(--muted); font-size: 12px; }
 
+/* timeline */
+.tile-h { flex-wrap: wrap; }
+.range { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.seg { margin-left: auto; display: inline-flex; background: var(--bg); border-radius: 9px; padding: 2px; gap: 1px; }
+.seg button { font-size: 12px; padding: 4px 9px; border-radius: 7px; color: var(--muted); }
+.seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(20,30,50,.12); }
+.toggle { width: 30px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--faint); }
+.toggle svg { width: 16px; height: 16px; }
+.toggle.on { color: var(--in); }
+#chart { height: 250px; margin: 0 4px 2px; }
+@media (max-width: 560px) { #chart { height: 200px; } .range { width: 100%; order: 9; padding-left: 34px; } }
+.tip b { display: block; margin-bottom: 2px; }
+.tip .bal { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tip table { border-collapse: collapse; margin-top: 6px; font-size: 11.5px; }
+.tip td { padding: 1px 0; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tip td.a { text-align: right; padding-left: 12px; font-variant-numeric: tabular-nums; }
+.tip td.a.in { color: var(--in); }
+.tip .more { color: var(--muted); font-size: 11px; margin-top: 3px; }
+
 /* transaction list (windowed) */
 .vlist { height: min(62vh, 640px); overflow-y: auto; position: relative; border-top: 1px solid var(--line); -webkit-overflow-scrolling: touch; }
 .vspace { position: relative; }
@@ -69,7 +89,8 @@ main { padding: 4px 16px 32px; max-width: 1200px; margin: 0 auto; display: grid;
 .list-h span:nth-child(n+4) { text-align: right; }
 .list-h button { color: var(--muted); font-size: 11px; padding: 0; }
 @media (max-width: 560px) {
-  .row, .list-h { grid-template-columns: 54px 1fr 80px; }
+  .row, .list-h { grid-template-columns: 62px 1fr 80px; gap: 6px; padding: 0 10px; }
+  .row .d { font-size: 11.5px; }
   .row .ty, .row .bal, .list-h .ty, .list-h .bal { display: none; }
 }
 
@@ -130,6 +151,15 @@ dialog::backdrop { background: rgba(20,30,50,.25); }
 </div>
 
 <main id="tiles" class="hidden">
+  <section class="tile" data-tile="timeline">
+    <div class="tile-h">
+      <button class="chev" title="Collapse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+      <h2>Balance</h2><span class="range" id="rangeLbl"></span>
+      <div class="seg" id="presets"><button data-p="1M">1M</button><button data-p="3M">3M</button><button data-p="6M">6M</button><button data-p="1Y">1Y</button><button data-p="All">All</button></div>
+      <button class="toggle" id="payBtn" title="Paydays"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M14.5 9.5c-.4-1-1.3-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2 0 2.8 5 1.6 5 4.2 0 1.2-1 2-2.5 2-1.3 0-2.2-.6-2.6-1.6M12 6.5V8m0 8v1.5"/></svg></button>
+    </div>
+    <div class="tile-b"><div id="chart"></div></div>
+  </section>
   <section class="tile" data-tile="tx">
     <div class="tile-h">
       <button class="chev" title="Collapse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
@@ -437,19 +467,78 @@ const Core = (() => {
     let breaks = 0;
     for (let i = 1; i < all.length; i++) if (all[i - 1].bal + all[i].amount !== all[i].bal) breaks++;
 
-    return { tx: all, statements: stm, gaps,
+    // days some source covers: statement periods and CSV spans, merged into ranges
+    const spans = [...stm.map(s => [s.period.from, s.period.to]), ...csvs.filter(c => c.from).map(c => [c.from, c.to])]
+      .sort((x, y) => x[0] < y[0] ? -1 : 1);
+    const cover = [];
+    for (const [f, t] of spans) {
+      const last = cover[cover.length - 1];
+      if (last && f <= addDays(last[1], 1)) { if (t > last[1]) last[1] = t; } else cover.push([f, t]);
+    }
+
+    return { tx: all, statements: stm, gaps, cover,
       stats: { pdfTx: pdfTx.length, csvRows: crow.length, matched, csvOnly, pdfUnmatched, fromCsv: extra.length, breaks,
         from: all.length ? all[0].date : null, to: all.length ? all[all.length - 1].date : null } };
   }
 
-  return { PARSER_VERSION, pence, fmt, rowDate, addDays, toLines, pdfToPages, parseHsbcPdf, csvRows, parseMidataCsv, merge };
+  // Day-end balance for every calendar day across the covered ranges. A day no statement or CSV
+  // covers is null, so the line breaks there instead of drawing a false flat stretch.
+  function dailyBalances(tx, cover) {
+    if (!tx.length) return [];
+    const end = new Map();
+    for (const t of tx) end.set(t.date, t.bal);                 // tx is chronological: the day's last entry wins
+    const first = cover && cover.length ? (cover[0][0] < tx[0].date ? cover[0][0] : tx[0].date) : tx[0].date;
+    const last = tx[tx.length - 1].date;
+    const inCover = d => !cover || !cover.length || cover.some(([f, t]) => d >= f && d <= t);
+    const out = [];
+    let bal = tx[0].bal - tx[0].amount;                            // balance before the first entry
+    for (let d = first; d <= last; d = addDays(d, 1)) {
+      if (end.has(d)) bal = end.get(d);
+      out.push({ date: d, bal: inCover(d) ? bal : null });
+    }
+    return out;
+  }
+
+  function addMonths(iso, n) {
+    const [y, m, d] = iso.split('-').map(Number);
+    const t = new Date(Date.UTC(y, m - 1 + n, 1));
+    const dim = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() + 1, 0)).getUTCDate();
+    return isoOf(t.getUTCFullYear(), t.getUTCMonth(), Math.min(d, dim));
+  }
+
+  // '1M' | '3M' | '6M' | '1Y' ending on `last`; anything else = everything (null)
+  function presetRange(last, key) {
+    const months = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12 }[key];
+    return months ? { from: addDays(addMonths(last, -months), 1), to: last } : null;
+  }
+
+  const inRange = (tx, r) => r ? tx.filter(t => t.date >= r.from && t.date <= r.to) : tx;
+
+  // Pay is the credit amount (within 5%) that recurs in the most different months — at most one
+  // per month, at least 3 months. Read from amounts, not names: the CSV hides who paid in.
+  function findPaydays(tx) {
+    const credits = tx.filter(t => t.amount >= 10000);           // £100 or more
+    let best = null;
+    for (const c of credits) {
+      const like = credits.filter(t => Math.abs(t.amount - c.amount) <= c.amount * 0.05);
+      const months = new Set(like.map(t => t.date.slice(0, 7))).size;
+      if (!best || months > best.months || (months === best.months && c.amount > best.amount)) best = { months, amount: c.amount, like };
+    }
+    if (!best || best.months < 3) return [];
+    const byMonth = new Map();
+    for (const t of best.like) { const m = t.date.slice(0, 7); if (!byMonth.has(m) || t.amount > byMonth.get(m).amount) byMonth.set(m, t); }
+    return [...byMonth.values()].sort((a, b) => a.date < b.date ? -1 : 1);
+  }
+
+  return { PARSER_VERSION, pence, fmt, rowDate, addDays, addMonths, toLines, pdfToPages, parseHsbcPdf, csvRows, parseMidataCsv, merge,
+    dailyBalances, presetRange, inRange, findPaydays };
 })();
 if (typeof module !== 'undefined') module.exports = Core;
 </script>
 
 <!-- ================= APP: storage, state, tiles ================= -->
 <script id="app">
-const STAMP = 'spend-20261019-foundations';
+const STAMP = 'spend-20261019-timeline';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
@@ -581,7 +670,8 @@ const state = {
   files: [], statements: [], csvs: [], ignored: [], merged: null,
   data: null,              // spending-data.json (categories, rules, tags, prefs) — used from the next phase
   dirty: false,
-  view: { desc: ls.get('sortDesc', true), q: '', rows: [], sel: null },
+  view: { desc: ls.get('sortDesc', true), q: '', rows: [], sel: null, range: null, preset: ls.get('preset', '1Y'), paydays: ls.get('paydays', true) },
+  paydays: [], byDay: new Map(),
 };
 
 function blankData() { return { version: 1, savedAt: null, categories: [], rules: [], tags: {}, prefs: {} }; }
@@ -631,6 +721,7 @@ async function loadAll() {
   progress(1);
   show('tiles');
   paintChrome();
+  buildTimeline();
   buildRows();
 }
 
@@ -649,7 +740,7 @@ function emptyState(label) {
 function paintChrome() {
   const s = state.merged && state.merged.stats;
   const bad = state.statements.some(x => !x.ok) || state.csvs.some(x => !x.ok) || (s && (s.csvOnly || s.pdfUnmatched)) || (state.merged && state.merged.gaps.length);
-  $('#status').textContent = s && s.from ? `${shortDate(s.from)} – ${shortDate(s.to)}` : '';
+  $('#status').textContent = '';
   $('#btnSystem').classList.toggle('dot', !!bad);
   $('#btnSave').classList.toggle('hidden', !(Store.kind === 'copy' && state.dirty));
 }
@@ -660,7 +751,7 @@ const shortDate = iso => `${+iso.slice(8)} ${MONTHS[+iso.slice(5, 7) - 1]} ${iso
 
 function buildRows() {
   const q = state.view.q.trim().toLowerCase();
-  let rows = state.merged ? state.merged.tx : [];
+  let rows = state.merged ? Core.inRange(state.merged.tx, state.view.range) : [];
   if (q) rows = rows.filter(t => (t.d.join(' ') + ' ' + (TYPES[t.type] || t.type) + ' ' + Core.fmt(t.amount)).toLowerCase().includes(q));
   if (state.view.desc) rows = rows.slice().reverse();
   state.view.rows = rows;
@@ -691,6 +782,116 @@ function drawRows() {
       + `<span class="bal">${Core.fmt(t.bal)}</span></div>`;
   }
   win.innerHTML = html;
+}
+
+// ---------- Timeline tile ----------
+// The zoomed window IS the app's date range: every other tile reads state.view.range.
+let chart = null, chartFirst = 0, chartLast = 0, presetting = false, zoomT;
+const DAY = 86400000;
+const tsOf = iso => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+const isoOf = ts => new Date(ts).toISOString().slice(0, 10);
+const compact = v => { const a = Math.abs(v), s = v < 0 ? '−' : ''; return a >= 1000 ? s + (a / 1000).toFixed(a >= 10000 ? 0 : 1).replace(/\.0$/, '') + 'k' : s + Math.round(a); };
+const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function buildTimeline() {
+  const m = state.merged;
+  if (!m || !m.tx.length || !window.echarts) return;
+  const days = Core.dailyBalances(m.tx, m.cover);
+  const dayEnd = new Map(days.map(d => [d.date, d.bal]));
+  state.byDay = new Map();
+  for (const t of m.tx) { if (!state.byDay.has(t.date)) state.byDay.set(t.date, []); state.byDay.get(t.date).push(t); }
+  state.paydays = Core.findPaydays(m.tx);
+  chartFirst = tsOf(days[0].date); chartLast = tsOf(days[days.length - 1].date);
+
+  if (!chart) {
+    chart = echarts.init($('#chart'), null, { renderer: 'canvas' });
+    chart.on('datazoom', () => { clearTimeout(zoomT); zoomT = setTimeout(readZoom, 90); });
+    chart.getZr().on('click', e => {
+      if (!chart.containPixel({ gridIndex: 0 }, [e.offsetX, e.offsetY])) return;
+      const [x] = chart.convertFromPixel({ gridIndex: 0 }, [e.offsetX, e.offsetY]);
+      jumpToDate(isoOf(Math.round(x / DAY) * DAY));
+    });
+    window.addEventListener('resize', () => chart.resize());
+  }
+  const blue = '#3b6ef5';
+  chart.setOption({
+    animation: false,
+    grid: { left: 10, right: 52, top: 12, bottom: 58 },
+    xAxis: { type: 'time', min: 'dataMin', max: 'dataMax', axisLine: { lineStyle: { color: '#e8ebf0' } }, axisTick: { show: false },
+      axisLabel: { color: '#8a92a3', fontSize: 11, hideOverlap: true }, splitLine: { show: false } },
+    yAxis: { type: 'value', position: 'right', scale: true, splitNumber: 3,
+      axisLabel: { color: '#8a92a3', fontSize: 11, formatter: v => '£' + compact(v) }, splitLine: { lineStyle: { color: '#f1f3f6' } } },
+    tooltip: { trigger: 'axis', confine: true, formatter: tip, backgroundColor: '#fff', borderColor: '#e8ebf0', padding: [8, 10],
+      textStyle: { color: '#1d2330', fontSize: 12 }, extraCssText: 'box-shadow:0 6px 20px rgba(20,30,50,.12);border-radius:10px;',
+      axisPointer: { type: 'line', lineStyle: { color: '#c3c8d2' } } },
+    dataZoom: [
+      { type: 'inside', zoomOnMouseWheel: 'ctrl', moveOnMouseWheel: 'shift', moveOnMouseMove: true, minValueSpan: 7 * DAY },
+      { type: 'slider', height: 22, bottom: 8, left: 10, right: 52, showDetail: false, brushSelect: false, minValueSpan: 7 * DAY,
+        borderColor: 'transparent', backgroundColor: '#f6f7f9', fillerColor: 'rgba(59,110,245,.10)',
+        handleStyle: { color: '#fff', borderColor: '#c3c8d2' }, moveHandleSize: 0,
+        dataBackground: { lineStyle: { color: '#c3c8d2', width: 1 }, areaStyle: { color: '#eef0f4' } },
+        selectedDataBackground: { lineStyle: { color: blue, width: 1 }, areaStyle: { color: 'rgba(59,110,245,.12)' } } }],
+    series: [
+      { type: 'line', step: 'end', showSymbol: false, connectNulls: false, emphasis: { disabled: true },
+        data: days.map(d => [tsOf(d.date), d.bal == null ? null : d.bal / 100]),
+        lineStyle: { width: 1.6, color: blue }, itemStyle: { color: blue },
+        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(59,110,245,.16)' }, { offset: 1, color: 'rgba(59,110,245,0)' }]) } },
+      { type: 'scatter', symbolSize: 8, z: 5, itemStyle: { color: '#17905a', borderColor: '#fff', borderWidth: 1.5 }, tooltip: { show: false },
+        data: state.view.paydays ? state.paydays.map(t => [tsOf(t.date), dayEnd.get(t.date) / 100]) : [] }],
+  }, true);
+  $('#payBtn').classList.toggle('on', state.view.paydays);
+  // a rebuild (paydays switched, folder re-read) keeps a hand-dragged window instead of jumping to a preset
+  if (state.view.preset || !state.view.range) applyPreset(state.view.preset || 'All');
+  else chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, startValue: tsOf(state.view.range.from), endValue: tsOf(state.view.range.to) });
+}
+
+function tip(params) {
+  const p = params.find(x => x.seriesIndex === 0);
+  if (!p || p.value[1] == null) return '';
+  const iso = isoOf(p.value[0]), list = state.byDay.get(iso) || [];
+  const isPay = state.view.paydays && state.paydays.some(t => t.date === iso);
+  let h = `<div class="tip"><b>${WEEKDAY[new Date(p.value[0]).getUTCDay()]} ${shortDate(iso)}${isPay ? ' · payday' : ''}</b><span class="bal">£${Core.fmt(Math.round(p.value[1] * 100))}</span>`;
+  if (list.length) {
+    h += '<table>' + list.slice(0, 6).map(t => `<tr><td>${esc(t.d[0] || TYPES[t.type] || t.type)}</td><td class="a ${t.amount > 0 ? 'in' : ''}">${Core.fmt(t.amount, true)}</td></tr>`).join('') + '</table>';
+    if (list.length > 6) h += `<div class="more">and ${list.length - 6} more</div>`;
+  }
+  return h + '</div>';
+}
+
+function applyPreset(key) {
+  if (!chart) return;
+  const r = Core.presetRange(isoOf(chartLast), key);
+  presetting = true;
+  chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, startValue: r ? Math.max(tsOf(r.from), chartFirst) : chartFirst, endValue: chartLast });
+  clearTimeout(zoomT);                                  // the chart's own echo of this action would clear the preset
+  state.view.preset = key; ls.set('preset', key);
+  readZoom();
+}
+
+// window (as % of the whole axis) -> whole days -> state.view.range -> every tile
+function readZoom() {
+  const dz = chart.getOption().dataZoom[0], span = chartLast - chartFirst;
+  const from = isoOf(Math.round((chartFirst + span * dz.start / 100) / DAY) * DAY);
+  const to = isoOf(Math.round((chartFirst + span * dz.end / 100) / DAY) * DAY);
+  if (!presetting) state.view.preset = null;
+  presetting = false;
+  document.querySelectorAll('#presets button').forEach(b => b.classList.toggle('on', b.dataset.p === state.view.preset));
+  const all = dz.start <= 0.01 && dz.end >= 99.99;
+  const next = all ? null : { from, to };
+  $('#rangeLbl').textContent = `${shortDate(from)} – ${shortDate(to)}`;
+  if (JSON.stringify(next) === JSON.stringify(state.view.range)) return;
+  state.view.range = next;
+  buildRows();
+}
+
+function jumpToDate(iso) {
+  const rows = state.view.rows;
+  if (!rows.length) return;
+  let i = rows.findIndex(t => state.view.desc ? t.date <= iso : t.date >= iso);
+  if (i < 0) i = rows.length - 1;
+  state.view.sel = rows[i].key;
+  $('#txList').scrollTop = i * ROW;
+  drawRows();
 }
 
 // ---------- PDF panel ----------
@@ -823,6 +1024,8 @@ $('#btnReload').onclick = () => loadAll();
 $('#btnSystem').onclick = openSystem;
 $('#btnSave').onclick = exportData;
 $('#pdfClose').onclick = closePdf;
+$('#presets').addEventListener('click', e => { const b = e.target.closest('button'); if (b) applyPreset(b.dataset.p); });
+$('#payBtn').onclick = () => { state.view.paydays = !state.view.paydays; ls.set('paydays', state.view.paydays); buildTimeline(); };
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePdf(); });
 $('#txList').addEventListener('scroll', () => requestAnimationFrame(drawRows), { passive: true });
 window.addEventListener('resize', () => drawRows());
@@ -837,7 +1040,10 @@ $('#txList').addEventListener('click', e => {
 document.querySelectorAll('.tile').forEach(tile => {
   const k = 'collapsed.' + tile.dataset.tile;
   tile.classList.toggle('collapsed', ls.get(k, false));
-  tile.querySelector('.chev').onclick = () => { tile.classList.toggle('collapsed'); ls.set(k, tile.classList.contains('collapsed')); };
+  tile.querySelector('.chev').onclick = () => {
+    tile.classList.toggle('collapsed'); ls.set(k, tile.classList.contains('collapsed'));
+    if (chart && tile.dataset.tile === 'timeline') chart.resize();
+  };
 });
 
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});

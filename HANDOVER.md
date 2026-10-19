@@ -10,6 +10,7 @@ Cold-start guide. Read this first. Technical detail is in ARCHITECTURE.md; build
 |---|---|
 | `index.html` | The whole app. `<script id="core">` = pure data layer (tested); `<script id="app">` = storage, state, tiles |
 | `vendor/pdf.js`, `vendor/pdf.worker.js` | pdf.js 3.11.174 legacy build — used by the app AND by the tests |
+| `vendor/echarts.min.js` | ECharts 5.5.1 — the balance timeline (later: pie and bar charts) |
 | `sw.js`, `manifest.json`, `icon-*.png` | Installable app + offline cache |
 | `run-tests.js` | Gate 1 (Node, no npm) |
 | `.githooks/pre-commit` | Refuses PDFs, CSVs, the data file and sort-code/account-number patterns |
@@ -26,8 +27,8 @@ git config core.hooksPath .githooks     # once per clone — turns on the bank-d
 node run-tests.js                       # baseline before touching anything
 ```
 
-**Current baseline: 41 of 41 passed (100%)** — 18 need Barry's sample folder; without it they show SKIPPED (not green).
-**Current build stamp: `spend-20261019-foundations`** (System panel, ⓘ top right)
+**Current baseline: 54 of 54 passed (100%)** — 23 need Barry's sample folder; without it they show SKIPPED (not green).
+**Current build stamp: `spend-20261019-timeline`** (System panel, ⓘ top right)
 **Live:** https://drhowarth.github.io/spending/
 
 Browser preview (iMac): `preview_start spending` (port 8040). To test with the sample statement, `preview_start
@@ -41,8 +42,8 @@ record defects before fixing → CHANGELOG + stamp → update this queue → com
 
 ## 3. ACTIVE WORK QUEUE (one per session — plan in ARCHITECTURE §7)
 
-1. ~~Foundations~~ — shipped `spend-20261019-foundations`. **Awaiting Barry's Gate 2 in Chrome and Safari.**
-2. **Timeline** (Sonnet) — balance step line, zoom/drag, 1M/3M/6M/1Y/All; zoomed range drives every tile; payday markers on by default.
+1. ~~Foundations~~ — shipped `spend-20261019-foundations`.
+2. ~~Timeline~~ — shipped `spend-20261019-timeline`. **Both awaiting Barry's Gate 2 in Chrome and Safari** (iPad pinch-zoom unchecked).
 3. **Categories** (Opus) — starter list, one category + optional labels, learned payee rules, savings transfers as their own switchable category, refund pairs in lilac. First real writer of `spending-data.json`.
 4. **Charts** (Sonnet) — pie by category, monthly bars; click filters the table.
 5. **Repeats and habits** (Opus) — regular payments, frequent habits (coffee), dots for price rises / new subscriptions.

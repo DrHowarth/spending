@@ -1,5 +1,22 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-timeline
+
+Phase 2: the balance timeline.
+- **Balance tile:** day-end balance as a step line; it breaks over days no statement or CSV covers.
+- **Zoom and pan:** drag, trackpad pinch, and a navigator slider. Preset buttons 1M / 3M / 6M / 1Y / All are remembered per device.
+- **The zoomed window is the app's date range.** The Transactions list now shows only that window, and later tiles will too.
+- **Tooltip:** weekday, date, day-end balance and the day's entries.
+- **Clicking the chart** jumps the list to that day.
+- **Payday dots,** on by default with a switch. Pay is found by a recurring amount, not a name.
+- The top bar no longer repeats the date range. The narrow-screen date column is wider.
+- **Tests:** 54 of 54 (100%). The 13 new ones cover daily balances, gaps, ranges, month-end arithmetic and paydays.
+
+Fixed during the build (found by rendering):
+- The slider hid the month labels.
+- The chart's echo of a preset button press cleared the highlight.
+- On a phone, the date ran into the shop name.
+
 ## 2026-10-19 — spend-20261019-foundations
 
 First build: the foundations phase.

@@ -21,7 +21,7 @@ data folder (Barry's, moves between devices by hand)
    - `FolderDriver` (Chrome/Edge): File System Access. The directory handle is kept in IndexedDB; on launch it asks for permission and shows a Reconnect button if Chrome wants a click.
    - `CopyDriver` (Safari, iPad): a folder (or file, on iOS) picker imports the files into IndexedDB. Data-file edits are saved in the app and flagged with a dot; ⤓ downloads a fresh `spending-data.json` to put back in the folder. When a folder is re-chosen, the newer `savedAt` wins.
 3. **State**: one `state` object (files, statements, CSVs, merged timeline, data, view). Tiles only read it.
-4. **Tiles**: the Transactions list (windowed, 40px rows) and the PDF panel. The System dialog shows the stamp, storage and every check.
+4. **Tiles**: Balance timeline, the Transactions list (windowed, 40px rows) and the PDF panel. The System dialog shows the stamp, storage and every check.
 
 The parse results are cached in IndexedDB, keyed by `name|size|lastModified|PARSER_VERSION`. **Bump `PARSER_VERSION` whenever the parser's output changes.**
 
@@ -49,12 +49,27 @@ Descriptions are **fixed-width 18-character blocks** (name, town). HSBC replaces
 - CSV rows outside every period are added. A CSV row inside a period with no match is added and flagged.
 - `key = date|amount|n` is the stable identity used for tags. It doesn't change when a CSV row is later replaced by its statement row.
 
-## 6. Testing with the real sample in the browser pane
+## 6. Timeline (the app's date range)
 
-Start `spending` and `spending-samples`. Then, in the page: fetch the files from `http://localhost:8041/…`, and either `IDB.put('files', …)` plus a `kv/files` index (copy mode, `?store=copy`), or write them into `navigator.storage.getDirectory()` and set `FolderDriver.handle` (folder mode). Then call `loadAll()`.
+- `dailyBalances(tx, cover)`: one day-end balance per calendar day. A day that no statement or CSV covers (`merge().cover`) is `null`, so the step line breaks over a missing month instead of drawing a false flat stretch.
+- Drawn as an ECharts `step: 'end'` line (a value holds until the next day's).
+- Zooming:
+  - `inside` zoom: drag to pan; trackpad pinch (ctrl+wheel) to zoom; shift+wheel to pan.
+  - Plain wheel is deliberately left alone, so the page still scrolls.
+  - `slider` below the chart works as a stock-chart navigator.
+- **The zoomed window is the app's date range:** `readZoom` → `state.view.range` (`null` means everything). Every tile filters with `Core.inRange`, so later tiles must read it, not keep their own.
+- **Presets** (`presetRange`): 1M/3M/6M/1Y end on the last day of data. A hand drag clears the preset. A rebuild keeps a dragged window. `applyPreset` cancels the chart's own echo of its action, or the echo would clear the preset.
+- **Paydays** (`findPaydays`): the credit amount (within 5%) that recurs in the most different months, at most one per month, at least 3 months. It reads amounts, not names, because the CSV hides payers.
+  - On the sample, the 12 dots sit on the 12 monthly salary jumps.
+  - The switch is stored per device in localStorage.
+- Clicking the chart jumps the Transactions list to that day.
+
+## 7. Testing with the real sample in the browser pane
+
+**ECharts draws only while the browser pane is visible** (show the preview pane first). Start `spending` and `spending-samples`. Then, in the page: fetch the files from `http://localhost:8041/…`, and either `IDB.put('files', …)` plus a `kv/files` index (copy mode, `?store=copy`), or write them into `navigator.storage.getDirectory()` and set `FolderDriver.handle` (folder mode). Then call `loadAll()`.
 **A hidden pane pauses drawing.** Run `drawPages` again once it is visible, and delete the OPFS folder and the `spending` IndexedDB afterwards.
 
-## 7. Build plan
+## 8. Build plan
 
 The plan approved on 19 Oct 2026, one phase per session:
 
@@ -66,4 +81,4 @@ The plan approved on 19 Oct 2026, one phase per session:
 6. Calculator
 7. Tile polish
 
-Libraries still to come: ECharts 5.5.1 (timeline with stock-style zoom, pie, bar) and SortableJS 1.15.2, both from cdnjs or jsdelivr at exact versions. Download them into `vendor/` the way pdf.js is, so they work offline.
+ECharts 5.5.1 is in `vendor/` (it reports zrender's own 5.6.0 too, which is expected). SortableJS 1.15.2 still has to be added the same way, for tile dragging.

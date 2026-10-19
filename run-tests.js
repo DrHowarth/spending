@@ -69,6 +69,31 @@ const eq = (name, got, want) => {
   const M2 = Core.merge([S, { ...S, period: { from: '2026-01-05', to: '2026-01-06' }, opening: 1, tx: [{ ...S.tx[0], date: '2026-01-05' }] }], []);
   eq('merge gap found', M2.gaps.map(g => g.kind + ' ' + g.from + '..' + g.to), ['missing 2026-01-03..2026-01-04']);
 
+  // timeline: day-end balances, uncovered days break the line, ranges, paydays
+  const T = [
+    { date: '2026-01-01', amount: -100, bal: 900 }, { date: '2026-01-01', amount: -50, bal: 850 },
+    { date: '2026-01-03', amount: 300000, bal: 300850 }, { date: '2026-01-06', amount: -1, bal: 300849 }];
+  const D = Core.dailyBalances(T, [['2026-01-01', '2026-01-03'], ['2026-01-05', '2026-01-06']]);
+  eq('daily: one point per day, day-end balance', D.map(d => d.bal), [850, 850, 300850, null, 300850, 300849]);
+  eq('daily: dates run through', [D[0].date, D[3].date, D[5].date], ['2026-01-01', '2026-01-04', '2026-01-06']);
+  const D2 = Core.dailyBalances(T, [['2025-12-30', '2026-01-06']]);
+  eq('daily: days before the first entry hold the opening balance', D2.slice(0, 3).map(d => d.bal), [1000, 1000, 850]);
+  eq('addMonths clamps to month end', [Core.addMonths('2026-03-31', -1), Core.addMonths('2026-01-31', 1), Core.addMonths('2026-01-15', -12)], ['2026-02-28', '2026-02-28', '2025-01-15']);
+  eq('preset 1M', Core.presetRange('2026-09-18', '1M'), { from: '2026-08-19', to: '2026-09-18' });
+  eq('preset 1Y', Core.presetRange('2026-09-18', '1Y'), { from: '2025-09-19', to: '2026-09-18' });
+  eq('preset All', Core.presetRange('2026-09-18', 'All'), null);
+  eq('inRange', Core.inRange(T, { from: '2026-01-02', to: '2026-01-05' }).length, 1);
+  const pay = [];
+  for (let m = 1; m <= 6; m++) {
+    const mm = String(m).padStart(2, '0');
+    pay.push({ date: `2026-${mm}-24`, amount: 380000 + m, key: 'p' + m });            // salary, wobbling by pennies
+    pay.push({ date: `2026-${mm}-02`, amount: 2000, key: 's' + m });                   // small credits ignored
+  }
+  pay.push({ date: '2026-03-10', amount: 100000, key: 'big1' }, { date: '2026-05-10', amount: 100000, key: 'big2' });   // one-off transfers
+  pay.push({ date: '2026-04-25', amount: 375000, key: 'p4b' });                      // a second near-salary credit in April
+  eq('paydays: recurring amount, one per month', Core.findPaydays(pay).map(t => t.key), ['p1', 'p2', 'p3', 'p4', 'p5', 'p6']);
+  eq('paydays: under 3 months is not pay', Core.findPaydays(pay.filter(t => t.date < '2026-03')).length, 0);
+
   // ---------- Part 2: Barry's real sample (outside the repo) ----------
   // The expected figures are his own money, so they live beside the samples, never here.
   const dir = process.env.SPENDING_SAMPLES || path.join(os.homedir(), 'Documents', 'Bank Things');
@@ -110,6 +135,11 @@ const eq = (name, got, want) => {
     eq('sample merge total', M3.tx.length, X.csvRows);
     eq('sample merge breaks', M3.stats.breaks, 0);
     eq('sample merge keys unique', new Set(M3.tx.map(t => t.key)).size, X.csvRows);
+    const days = Core.dailyBalances(M3.tx, M3.cover);
+    eq('sample daily points', [days.length, days.filter(d => d.bal == null).length], [X.days, 0]);
+    eq('sample daily ends on closing balance', days[days.length - 1].bal, M3.tx[M3.tx.length - 1].bal);
+    const P2 = Core.findPaydays(M3.tx);
+    eq('sample paydays', [P2.length, P2.every(t => t.amount === P2[0].amount || Math.abs(t.amount - P2[0].amount) <= P2[0].amount * 0.05)], [X.paydays, true]);
 
     if (process.argv.includes('--dump')) {
       fs.mkdirSync(path.join(__dirname, '.render'), { recursive: true });
