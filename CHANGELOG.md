@@ -1,5 +1,11 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-fresh-load
+
+- **Fixed a stale build on reopening.** Barry reopened the app in Safari and got `spend-20261019-timeline` after `drag-select` was live, so drag-to-select seemed broken.
+  - Cause: GitHub Pages sends `max-age=600`, and `sw.js` fetched with the default cache mode, so a reopen within 10 minutes of a push got the old page.
+  - Fix: `sw.js` now fetches with `cache: 'no-cache'`, so every opening re-checks with GitHub.
+
 ## 2026-10-19 — spend-20261019-drag-select
 
 - **Drag across the balance chart to select a new window**, which the chart then zooms to (Barry's request).

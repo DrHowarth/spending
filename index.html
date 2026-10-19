@@ -538,7 +538,7 @@ if (typeof module !== 'undefined') module.exports = Core;
 
 <!-- ================= APP: storage, state, tiles ================= -->
 <script id="app">
-const STAMP = 'spend-20261019-drag-select';
+const STAMP = 'spend-20261019-fresh-load';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
