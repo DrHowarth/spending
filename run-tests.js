@@ -123,6 +123,7 @@ const eq = (name, got, want) => {
     { key: 1, date: '2026-01-01', d: ['BRITISH GAS'], type: 'DD', amount: -9000 }, { key: 2, date: '2026-02-01', d: ['BRITISH GAS'], type: 'DD', amount: -9000 },
     { key: 3, date: '2026-03-01', d: ['BRITISH GAS'], type: 'CR', amount: 4000 }], {});
   eq('payeeSummary: a refund credit last does not make a bill payee income', [PS2[0].cat, PS2[0].src], ['bills', 'guess']);
+  eq('payeeSummary: money out and money in kept apart', [PS2[0].n, PS2[0].out, PS2[0].inn], [3, 18000, 4000]);
   eq('payeeSummary', PS.map(p => [p.key, p.n, p.out, p.cat, p.src]), [['WAITROSE', 1, 5000, 'other', 'rule'], ['COSTA', 2, 750, 'coffee', 'guess']]);
 
   // spending charts: money out less refunds; pay and transfers in are not spending; months run through

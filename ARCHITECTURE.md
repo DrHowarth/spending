@@ -79,7 +79,8 @@ Descriptions are **fixed-width 18-character blocks** (name, town). HSBC replaces
   - HSBC cuts names to 18 characters in both the PDF and the CSV, so both sources give the same key.
   - The CSV masks payees on CR/BP/SO/DR/TFR rows. Those have no key, so they can only take a type guess or a per-row tag.
 - **Refunds (`findRefunds`):** a credit pairs with the latest earlier payment to the same payee, for the same amount, within 90 days, at most once. Both rows are tinted lilac; the switch is per device.
-- **"Sort payees"** lists payees in the timeline's range without a rule, biggest spend first. A payee's shown guess is the one most of its payments get, not the latest payment's (Barry's British Gas read "Income" because its latest row was a credit). ✓ or a change makes a rule, and the message offers Undo for 6 s. It is a tagging tool, and the hint line at the top says so.
+- **"Sort payees"** lists payees in the timeline's range without a rule, biggest spend first. A payee's shown guess is the one most of its payments get, not the latest payment's (Barry's British Gas read "Income" because its latest row was a credit). ✓ or a change makes a rule, and the message offers Undo for 6 s. It is a tagging tool, and the hint line at the top says so. Each payee shows "N payments · £out out · £in in": money out and in are kept apart and never netted. Clicking a payee unfolds its payments underneath (30 at a time); a statement row opens the PDF.
+- **`showLines(t)`** drops the masked `INT'L **********` first line of card rows wherever payments are listed, so the merchant shows first.
 - **On the sample:**
   - The guesses cover 996 of 1,451 rows (68.6%).
   - There is 1 refund pair (Apple, £20).

@@ -131,7 +131,17 @@ main { padding: 4px 16px 32px; max-width: 1200px; margin: 0 auto; display: grid;
 .tabs button.on { background: var(--bg); color: var(--ink); }
 .toggle.lilac.on { color: #8a63d2; }
 .prow { display: grid; grid-template-columns: 14px 1fr auto 150px 28px; align-items: center; gap: 10px; padding: 7px 14px; border-top: 1px solid #f1f3f6; font-size: 13px; }
-.prow .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.prow .nm svg { flex: none; color: var(--faint); transition: transform .15s; }
+.prow.open .nm svg { transform: rotate(90deg); color: var(--muted); }
+.prow .st { cursor: pointer; }
+.prow .st .in { color: var(--in); }
+.prow.open { background: #f8f9fb; }
+.psub { background: #fafbfc; border-top: 1px solid #f1f3f6; }
+.psub .cp-r { padding-left: 38px; background: transparent; grid-template-columns: 76px 1fr auto; }
+.cp-r .d { white-space: nowrap; }
+.psub .cp-r.refund { background: #f4effd; }
+.psub .more { margin: 6px auto 10px; }
 .prow .st { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .prow select { font: inherit; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; background: #fff; color: var(--ink); }
 .prow .ok { width: 26px; height: 26px; border-radius: 8px; color: var(--in); display: grid; place-items: center; }
@@ -702,8 +712,8 @@ const Core = (() => {
     for (const t of tx) {
       const k = payeeKey(t);
       if (!k) continue;
-      if (!by.has(k)) by.set(k, { key: k, n: 0, out: 0, votes: new Map() });
-      const p = by.get(k); p.n++; if (t.amount < 0) p.out -= t.amount;
+      if (!by.has(k)) by.set(k, { key: k, n: 0, out: 0, inn: 0, votes: new Map() });
+      const p = by.get(k); p.n++; if (t.amount < 0) p.out -= t.amount; else p.inn += t.amount;
       const c = categoryOf({ ...t, key: null }, { rules: data.rules });
       const id = (c.cat || '') + '|' + c.src;
       p.votes.set(id, (p.votes.get(id) || 0) + 1);
@@ -756,7 +766,7 @@ if (typeof module !== 'undefined') module.exports = Core;
 
 <!-- ================= APP: storage, state, tiles ================= -->
 <script id="app">
-const STAMP = 'spend-20261019-sort-undo';
+const STAMP = 'spend-20261019-payee-detail';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
@@ -890,7 +900,7 @@ const state = {
   dirty: false,
   view: { desc: ls.get('sortDesc', true), q: '', rows: [], sel: null, range: null, preset: ls.get('preset', '1Y'), paydays: ls.get('paydays', true) },
   paydays: [], byDay: new Map(), catOf: new Map(), refunds: new Map(),
-  catView: { tab: 'sort', shown: 12, refunds: ls.get('refunds', true), editing: false, open: null, panelRange: null },
+  catView: { tab: 'sort', shown: 12, refunds: ls.get('refunds', true), editing: false, open: null, panelRange: null, expanded: new Map(), subRows: new Map() },
   chartHidden: new Set(ls.get('chartHidden', [])),
 };
 
@@ -977,6 +987,7 @@ function paintChrome() {
 
 // ---------- Transactions tile ----------
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const showLines = t => /^INT'?L\b/i.test(t.d[0] || '') && t.d.length > 1 ? t.d.slice(1) : t.d;
 const shortDate = iso => `${+iso.slice(8)} ${MONTHS[+iso.slice(5, 7) - 1]} ${iso.slice(2, 4)}`;
 
 function buildRows() {
@@ -1010,7 +1021,7 @@ function drawRows() {
     html += `<div class="${cls}" data-i="${i}" title="${esc(t.flag || (t.src === 'pdf' ? 'Show on statement' : 'From CSV'))}">`
       + `<span class="d">${showDate ? shortDate(t.date) : ''}</span>`
       + `<span class="cd"><span class="cdot ${cat ? (c.src === 'guess' ? 'guess' : '') : 'none'}" data-pick="${i}" style="background:${cat ? cat.color : 'transparent'}" title="${esc(cat ? cat.name + (c.src === 'guess' ? ' (guess)' : '') : 'No category')}${partner ? ' · refund pair' : ''}"></span></span>`
-      + `<span class="desc">${t.d.length ? esc(t.d[0]) : `<span class="none">${esc(TYPES[t.type] || t.type)}</span>`}${t.d.length > 1 ? `<i>${esc(t.d.slice(1).join(' · '))}</i>` : ''}${labels.map(l => `<span class="lbl">#${esc(l)}</span>`).join('')}</span>`
+      + `<span class="desc">${(L => L.length ? esc(L[0]) + (L.length > 1 ? `<i>${esc(L.slice(1).join(' · '))}</i>` : '') : `<span class="none">${esc(TYPES[t.type] || t.type)}</span>`)(showLines(t))}${labels.map(l => `<span class="lbl">#${esc(l)}</span>`).join('')}</span>`
       + `<span class="ty" title="${esc(TYPES[t.type] || t.type)}">${esc(t.type)}</span>`
       + `<span class="amt ${t.amount > 0 ? 'in' : 'out'}">${Core.fmt(t.amount, true)}</span>`
       + `<span class="bal">${Core.fmt(t.bal)}</span></div>`;
@@ -1113,7 +1124,7 @@ function tip(params) {
   const isPay = state.view.paydays && state.paydays.some(t => t.date === iso);
   let h = `<div class="tip"><b>${WEEKDAY[new Date(p.value[0]).getUTCDay()]} ${shortDate(iso)}${isPay ? ' · payday' : ''}</b><span class="bal">£${Core.fmt(Math.round(p.value[1] * 100))}</span>`;
   if (list.length) {
-    h += '<table>' + list.slice(0, 6).map(t => `<tr><td>${esc(t.d[0] || TYPES[t.type] || t.type)}</td><td class="a ${t.amount > 0 ? 'in' : ''}">${Core.fmt(t.amount, true)}</td></tr>`).join('') + '</table>';
+    h += '<table>' + list.slice(0, 6).map(t => `<tr><td>${esc(showLines(t)[0] || TYPES[t.type] || t.type)}</td><td class="a ${t.amount > 0 ? 'in' : ''}">${Core.fmt(t.amount, true)}</td></tr>`).join('') + '</table>';
     if (list.length > 6) h += `<div class="more">and ${list.length - 6} more</div>`;
   }
   return h + '</div>';
@@ -1216,7 +1227,7 @@ function openPicker(t, anchor) {
   pickFor = t;
   const k = Core.payeeKey(t), cur = state.catOf.get(t.key) || {}, tag = state.data.tags[t.key] || {};
   const el = $('#picker');
-  el.innerHTML = `<div class="who">${esc(t.d[0] || TYPES[t.type] || t.type)} · ${shortDate(t.date)} · ${Core.fmt(t.amount, true)}</div>`
+  el.innerHTML = `<div class="who">${esc(showLines(t)[0] || TYPES[t.type] || t.type)} · ${shortDate(t.date)} · ${Core.fmt(t.amount, true)}</div>`
     + `<div class="grid">${state.data.categories.map(c => `<button data-cat="${c.id}" class="${cur.cat === c.id ? 'on' : ''}"><span class="cdot" style="background:${c.color}"></span>${esc(c.name)}</button>`).join('')}<button class="new" id="pkNew">+ New</button></div>`
     + `<div class="newcat hidden" id="pkNewRow"><input type="text" id="pkNewName" placeholder="New category name"><button id="pkNewAdd">Add</button></div>`
     + (k ? `<label><input type="checkbox" id="pkAll" ${tag.cat ? '' : 'checked'}> All from ${esc(k)}</label>` : '<label style="color:var(--muted)">This payee is hidden by the bank, so this sets one entry.</label>')
@@ -1253,6 +1264,20 @@ $('#picker').addEventListener('keydown', e => { if (e.key !== 'Enter') return; i
 document.addEventListener('mousedown', e => { if (pickFor && !e.target.closest('#picker') && !e.target.closest('.cdot')) closePicker(); });
 
 // The Categories tile: payees still to sort (biggest spend first, in the timeline's range), and the list.
+// The payments behind one payee's line in "Sort payees", newest first.
+function payeeSubList(key, tx) {
+  const rows = tx.filter(t => Core.payeeKey(t) === key).reverse();
+  state.catView.subRows.set(key, rows);
+  const shown = state.catView.expanded.get(key);
+  return `<div class="psub" data-k="${esc(key)}">` + rows.slice(0, shown).map((t, i) => {
+    const partner = state.catView.refunds && state.refunds.get(t.key);
+    return `<div class="cp-r ${t.src} ${partner ? 'refund' : ''}" data-i="${i}" title="${t.src === 'pdf' ? 'Show on statement' : 'From CSV'}">`
+      + `<span class="d">${shortDate(t.date)}</span>`
+      + `<span class="nm">${(L => L.length ? esc(L[0]) + (L.length > 1 ? `<i>${esc(L.slice(1).join(' · '))}</i>` : '') : esc(TYPES[t.type] || t.type))(showLines(t))}</span>`
+      + `<span class="a ${t.amount > 0 ? 'in' : ''}">${Core.fmt(t.amount, true)}</span></div>`;
+  }).join('') + (rows.length > shown ? `<button class="more" data-sub="${esc(key)}">Show ${Math.min(50, rows.length - shown)} more of ${rows.length - shown}</button>` : '') + `</div>`;
+}
+
 function buildCats() {
   const body = $('#catBody'); if (!state.merged) return;
   const tx = Core.inRange(state.merged.tx, state.view.range);
@@ -1264,13 +1289,15 @@ function buildCats() {
   const opts = sel => `<option value="">—</option>` + state.data.categories.map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
   if (state.catView.tab === 'sort') {
     if (!todo.length) { body.innerHTML = '<div class="empty-note">Every payee in this range has a category.</div>'; return; }
-    body.innerHTML = `<div class="sort-hint">The app has guessed these payees. ✓ keeps the guess, or pick another. Sorted payees leave this list and stay in their category.</div>` + todo.slice(0, state.catView.shown).map(p => {
-      const c = catById(p.cat);
-      return `<div class="prow" data-k="${esc(p.key)}"><span class="cdot ${c ? 'guess' : 'none'}" style="background:${c ? c.color : 'transparent'}"></span>`
-        + `<span class="nm" title="${esc(p.key)}">${esc(p.key)}</span><span class="st">${p.n} × · £${Core.fmt(p.out)}</span>`
+    state.catView.subRows = new Map();
+    body.innerHTML = `<div class="sort-hint">The app has guessed these payees. ✓ keeps the guess, or pick another. Sorted payees leave this list and stay in their category. Click a payee to see its payments.</div>` + todo.slice(0, state.catView.shown).map(p => {
+      const c = catById(p.cat), open = state.catView.expanded.has(p.key);
+      return `<div class="prow ${open ? 'open' : ''}" data-k="${esc(p.key)}"><span class="cdot ${c ? 'guess' : 'none'}" style="background:${c ? c.color : 'transparent'}"></span>`
+        + `<span class="nm" title="${esc(p.key)}"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>${esc(p.key)}</span>`
+        + `<span class="st">${p.n} payment${p.n === 1 ? '' : 's'}${p.out ? ` · £${Core.fmt(p.out)} out` : ''}${p.inn ? ` · <span class="in">£${Core.fmt(p.inn)} in</span>` : ''}</span>`
         + `<select>${opts(p.cat)}</select>`
         + (c ? `<button class="ok" title="Keep ${esc(c.name)}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></button>` : '<span></span>')
-        + `</div>`;
+        + `</div>` + (open ? payeeSubList(p.key, tx) : '');
     }).join('') + (todo.length > state.catView.shown ? `<button class="more" id="moreBtn">Show more (${todo.length - state.catView.shown} left · ${unsortedRows.toLocaleString('en-GB')} entries unconfirmed)</button>` : '');
   } else if (state.catView.editing) {
     body.innerHTML = `<div class="chips">${state.data.categories.map(c => `<span class="chip" data-id="${c.id}"><input type="color" value="${c.color}" title="Colour"><input type="text" value="${esc(c.name)}" title="Rename"><button class="del" title="Delete">×</button></span>`).join('')}`
@@ -1304,6 +1331,20 @@ $('#catBody').addEventListener('click', e => {
   const ok = e.target.closest('.ok');
   if (ok) { const row = ok.closest('.prow'); ruleWithUndo(row.dataset.k, row.querySelector('select').value || null); return; }
   if (e.target.closest('#moreBtn')) { state.catView.shown += 12; buildCats(); return; }
+  const subMore = e.target.closest('[data-sub]');
+  if (subMore) { const k = subMore.dataset.sub; state.catView.expanded.set(k, state.catView.expanded.get(k) + 50); buildCats(); return; }
+  const subRow = e.target.closest('.psub .cp-r');
+  if (subRow) {
+    const t = state.catView.subRows.get(subRow.closest('.psub').dataset.k)[+subRow.dataset.i];
+    if (t.src === 'pdf') openPdf(t); else toast('From the CSV — no statement for this month yet');
+    return;
+  }
+  const head = e.target.closest('.prow .nm, .prow .st');
+  if (head) {
+    const k = head.closest('.prow').dataset.k;
+    if (state.catView.expanded.has(k)) state.catView.expanded.delete(k); else state.catView.expanded.set(k, 30);
+    buildCats(); return;
+  }
   if (e.target.closest('#editCats')) { state.catView.editing = !state.catView.editing; buildCats(); return; }
   const del = e.target.closest('.chip .del');
   if (del) { deleteCategory(del.closest('.chip').dataset.id); return; }
@@ -1431,7 +1472,7 @@ function renderCatPanel() {
     const partner = state.catView.refunds && state.refunds.get(t.key);
     h += `<div class="cp-r ${t.src} ${partner ? 'refund' : ''}" data-i="${i}" title="${t.src === 'pdf' ? 'Show on statement' : 'From CSV'}">`
       + `<span class="d">${+t.date.slice(8)} ${MONTHS[+t.date.slice(5, 7) - 1]}</span>`
-      + `<span class="nm">${t.d.length ? esc(t.d[0]) : esc(TYPES[t.type] || t.type)}${t.d.length > 1 ? `<i>${esc(t.d.slice(1).join(' · '))}</i>` : ''}</span>`
+      + `<span class="nm">${(L => L.length ? esc(L[0]) + (L.length > 1 ? `<i>${esc(L.slice(1).join(' · '))}</i>` : '') : esc(TYPES[t.type] || t.type))(showLines(t))}</span>`
       + `<span class="a ${t.amount > 0 ? 'in' : ''}">${Core.fmt(t.amount, true)}</span></div>`;
   });
   $('#cpBody').innerHTML = h || '<div class="empty-note">Nothing in this category in the selected dates.</div>';
@@ -1452,7 +1493,7 @@ async function openPdf(t) {
   const panel = $('#pdfPanel'), body = $('#pdfBody');
   panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false');
   $('#pdfName').textContent = t.file;
-  $('#pdfSub').textContent = `${shortDate(t.date)} · ${t.d[0] || TYPES[t.type] || ''} · ${Core.fmt(t.amount, true)} · page ${t.page}`;
+  $('#pdfSub').textContent = `${shortDate(t.date)} · ${showLines(t)[0] || TYPES[t.type] || ''} · ${Core.fmt(t.amount, true)} · page ${t.page}`;
   if (body.dataset.file !== t.file) {
     body.dataset.file = t.file; body.innerHTML = '';
     if (!pdfDocs.has(t.file)) {

@@ -1,5 +1,14 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-payee-detail
+
+- **Barry: is the total money out and in together? "70 ×" reads like 70 equal payments.**
+  - Answer: it was money out only.
+  - Each payee now reads "70 payments · £x out · £y in", with money in shown separately.
+- **Click a payee in Sort payees to unfold every payment behind its total,** 30 at a time, newest first. A statement payment opens its PDF.
+- Card rows no longer lead with the bank's masked `INT'L **********` reference; the merchant shows first in every list, the PDF header, the chart tooltip and the picker.
+- **Checked on the sample:** Apple shows 44 payments · £379.62 out · £20.00 in, which equals the raw sums. The refund pair is lilac, and 12 Aug opened page 8, highlighted.
+
 ## 2026-10-19 — spend-20261019-sort-undo
 
 - **Barry: "is this a tagging tool? I clicked the green tick and the category disappeared."**
