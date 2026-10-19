@@ -67,6 +67,17 @@ main { padding: 4px 16px 32px; max-width: 1200px; margin: 0 auto; display: grid;
 .tip td.a.in { color: var(--in); }
 .tip .more { color: var(--muted); font-size: 11px; margin-top: 3px; }
 
+/* spending charts */
+.charts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 6px; padding: 0 8px 8px; }
+#pie, #bars { height: 300px; }
+@media (max-width: 760px) { .charts { grid-template-columns: 1fr; } #pie { height: 280px; } #bars { height: 240px; } }
+.chip .del { color: var(--muted); font-size: 14px; line-height: 1; padding: 0 2px; }
+.chip .del:hover { color: var(--bad); }
+#picker .grid button.new { color: var(--accent); }
+#picker .newcat { display: flex; gap: 6px; margin-top: 6px; }
+#picker .newcat button { font-size: 12.5px; padding: 4px 10px; border-radius: 8px; background: var(--accent); color: #fff; }
+.crow.add { color: var(--accent); grid-template-columns: 14px 1fr; }
+
 /* transaction list (windowed) */
 .vlist { height: min(62vh, 640px); overflow-y: auto; position: relative; border-top: 1px solid var(--line); -webkit-overflow-scrolling: touch; }
 .vspace { position: relative; }
@@ -219,6 +230,13 @@ dialog::backdrop { background: rgba(20,30,50,.25); }
       <button class="toggle" id="payBtn" title="Paydays"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M14.5 9.5c-.4-1-1.3-1.5-2.5-1.5-1.5 0-2.5.8-2.5 2 0 2.8 5 1.6 5 4.2 0 1.2-1 2-2.5 2-1.3 0-2.2-.6-2.6-1.6M12 6.5V8m0 8v1.5"/></svg></button>
     </div>
     <div class="tile-b"><div id="chart"></div></div>
+  </section>
+  <section class="tile" data-tile="charts">
+    <div class="tile-h">
+      <button class="chev" title="Collapse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+      <h2>Spending</h2><span class="range" id="spendLbl"></span>
+    </div>
+    <div class="tile-b"><div class="charts"><div id="pie"></div><div id="bars"></div></div></div>
   </section>
   <section class="tile" data-tile="tx">
     <div class="tile-h">
@@ -688,15 +706,48 @@ const Core = (() => {
       .sort((a, b) => b.out - a.out || b.n - a.n);
   }
 
+  // ---------- Spending charts ----------
+  // Spending = money out, less refunds of it. Other money in (pay, money back from savings) is not spending.
+  const spendOf = (t, refund) => t.amount < 0 ? -t.amount : refund ? -t.amount : 0;
+
+  // category id ('' = uncategorised) -> pence spent
+  function spendTotals(tx, catOf, isRefund) {
+    const m = new Map();
+    for (const t of tx) {
+      const v = spendOf(t, isRefund(t));
+      if (!v) continue;
+      const c = catOf(t) || '';
+      m.set(c, (m.get(c) || 0) + v);
+    }
+    return m;
+  }
+
+  // Every calendar month from the first entry's to the last's (empty months included, so the bars
+  // keep true spacing), with pence spent per category per month.
+  function spendByMonth(tx, catOf, isRefund) {
+    if (!tx.length) return { months: [], byCat: new Map() };
+    const months = [];
+    for (let m = tx[0].date.slice(0, 7); m <= tx[tx.length - 1].date.slice(0, 7); m = addMonths(m + '-01', 1).slice(0, 7)) months.push(m);
+    const at = new Map(months.map((m, i) => [m, i])), byCat = new Map();
+    for (const t of tx) {
+      const v = spendOf(t, isRefund(t));
+      if (!v) continue;
+      const c = catOf(t) || '';
+      if (!byCat.has(c)) byCat.set(c, months.map(() => 0));
+      byCat.get(c)[at.get(t.date.slice(0, 7))] += v;
+    }
+    return { months, byCat };
+  }
+
   return { PARSER_VERSION, pence, fmt, rowDate, addDays, addMonths, toLines, pdfToPages, parseHsbcPdf, csvRows, parseMidataCsv, merge,
-    dailyBalances, presetRange, inRange, findPaydays, CATEGORIES, payeeKey, categoryOf, findRefunds, payeeSummary };
+    dailyBalances, presetRange, inRange, findPaydays, CATEGORIES, payeeKey, categoryOf, findRefunds, payeeSummary, spendTotals, spendByMonth };
 })();
 if (typeof module !== 'undefined') module.exports = Core;
 </script>
 
 <!-- ================= APP: storage, state, tiles ================= -->
 <script id="app">
-const STAMP = 'spend-20261019-category-panel';
+const STAMP = 'spend-20261019-charts';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
@@ -830,7 +881,8 @@ const state = {
   dirty: false,
   view: { desc: ls.get('sortDesc', true), q: '', rows: [], sel: null, range: null, preset: ls.get('preset', '1Y'), paydays: ls.get('paydays', true) },
   paydays: [], byDay: new Map(), catOf: new Map(), refunds: new Map(),
-  catView: { tab: 'sort', shown: 12, refunds: ls.get('refunds', true), editing: false, open: null },
+  catView: { tab: 'sort', shown: 12, refunds: ls.get('refunds', true), editing: false, open: null, panelRange: null },
+  chartHidden: new Set(ls.get('chartHidden', [])),
 };
 
 function blankData() { return { version: 1, savedAt: null, categories: [], rules: {}, tags: {}, prefs: {} }; }
@@ -891,6 +943,7 @@ async function loadAll() {
   computeCats();
   buildRows();
   buildCats();
+  buildCharts();
 }
 
 function show(which) {
@@ -1082,6 +1135,7 @@ function readZoom() {
   state.view.range = next;
   buildRows();
   buildCats();
+  buildCharts();
 }
 
 function jumpToDate(iso) {
@@ -1098,6 +1152,27 @@ function jumpToDate(iso) {
 // Everything Barry decides lives in state.data (spending-data.json): rules {payeeKey -> cat} and
 // tags {txKey -> {cat, labels}}. state.catOf is derived from it and rebuilt after every change.
 const catById = id => id && state.data.categories.find(c => c.id === id);
+// new categories take colours unlike the 16 starters
+const SPARE_COLOURS = ['#00bcd4', '#9c27b0', '#cddc39', '#3f51b5', '#ff7043', '#f06292', '#00e676', '#ffca28', '#8d6e63', '#26a69a', '#ab47bc', '#78909c'];
+function newCategory(name) {
+  const used = new Set(state.data.categories.map(c => c.color));
+  const color = SPARE_COLOURS.find(c => !used.has(c)) || SPARE_COLOURS[state.data.categories.length % SPARE_COLOURS.length];
+  const cat = { id: 'c' + Date.now().toString(36), name: name.trim(), color };
+  state.data.categories.push(cat);
+  return cat;
+}
+// Deleting a category sends its payees and single choices back to their first guess or to uncategorised.
+function deleteCategory(id) {
+  const c = catById(id); if (!c) return;
+  const rules = Object.keys(state.data.rules).filter(k => state.data.rules[k] === id);
+  const tags = Object.keys(state.data.tags).filter(k => state.data.tags[k].cat === id);
+  if (!confirm(`Delete "${c.name}"?` + (rules.length + tags.length ? ` ${rules.length} payee${rules.length === 1 ? '' : 's'} and ${tags.length} single choice${tags.length === 1 ? '' : 's'} using it will go back to their first guess or to uncategorised.` : ''))) return;
+  rules.forEach(k => delete state.data.rules[k]);
+  tags.forEach(k => setTag(k, { cat: null }));
+  state.data.categories = state.data.categories.filter(x => x.id !== id);
+  state.chartHidden.delete(id);
+  changed();
+}
 const catName = t => { const c = catById((state.catOf.get(t.key) || {}).cat); return c ? c.name : ''; };
 
 function computeCats() {
@@ -1109,7 +1184,7 @@ function computeCats() {
 
 let saveT;
 function changed() {
-  computeCats(); drawRows(); buildCats();
+  computeCats(); drawRows(); buildCats(); buildCharts();
   clearTimeout(saveT); saveT = setTimeout(() => saveData().catch(e => toast('Not saved: ' + e.message)), 400);
 }
 
@@ -1127,7 +1202,8 @@ function openPicker(t, anchor) {
   const k = Core.payeeKey(t), cur = state.catOf.get(t.key) || {}, tag = state.data.tags[t.key] || {};
   const el = $('#picker');
   el.innerHTML = `<div class="who">${esc(t.d[0] || TYPES[t.type] || t.type)} · ${shortDate(t.date)} · ${Core.fmt(t.amount, true)}</div>`
-    + `<div class="grid">${state.data.categories.map(c => `<button data-cat="${c.id}" class="${cur.cat === c.id ? 'on' : ''}"><span class="cdot" style="background:${c.color}"></span>${esc(c.name)}</button>`).join('')}</div>`
+    + `<div class="grid">${state.data.categories.map(c => `<button data-cat="${c.id}" class="${cur.cat === c.id ? 'on' : ''}"><span class="cdot" style="background:${c.color}"></span>${esc(c.name)}</button>`).join('')}<button class="new" id="pkNew">+ New</button></div>`
+    + `<div class="newcat hidden" id="pkNewRow"><input type="text" id="pkNewName" placeholder="New category name"><button id="pkNewAdd">Add</button></div>`
     + (k ? `<label><input type="checkbox" id="pkAll" ${tag.cat ? '' : 'checked'}> All from ${esc(k)}</label>` : '<label style="color:var(--muted)">This payee is hidden by the bank, so this sets one entry.</label>')
     + `<input type="text" id="pkLabels" placeholder="Labels, e.g. holiday 2024" value="${esc((tag.labels || []).join(', '))}">`
     + `<div class="foot"><button id="pkClear">Clear</button><button id="pkDone">Done</button></div>`;
@@ -1147,6 +1223,8 @@ $('#picker').addEventListener('click', e => {
   const t = pickFor; if (!t) return;
   const b = e.target.closest('button'); if (!b) return;
   const all = $('#pkAll') && $('#pkAll').checked, k = Core.payeeKey(t);
+  if (b.id === 'pkNew') { $('#pkNewRow').classList.remove('hidden'); $('#pkNewName').focus(); return; }
+  if (b.id === 'pkNewAdd') { const n = $('#pkNewName').value.trim(); if (!n) return; b.dataset.cat = newCategory(n).id; }
   if (b.dataset.cat) {
     if (all && k) { setRule(k, b.dataset.cat); setTag(t.key, { cat: null }); }
     else setTag(t.key, { cat: b.dataset.cat });
@@ -1156,7 +1234,7 @@ $('#picker').addEventListener('click', e => {
     saveLabels(); changed(); closePicker();
   } else if (b.id === 'pkDone') closePicker();
 });
-$('#picker').addEventListener('keydown', e => { if (e.key === 'Enter') closePicker(); });
+$('#picker').addEventListener('keydown', e => { if (e.key !== 'Enter') return; if (e.target.id === 'pkNewName') $('#pkNewAdd').click(); else closePicker(); });
 document.addEventListener('mousedown', e => { if (pickFor && !e.target.closest('#picker') && !e.target.closest('.cdot')) closePicker(); });
 
 // The Categories tile: payees still to sort (biggest spend first, in the timeline's range), and the list.
@@ -1180,7 +1258,7 @@ function buildCats() {
         + `</div>`;
     }).join('') + (todo.length > state.catView.shown ? `<button class="more" id="moreBtn">Show more (${todo.length - state.catView.shown} left · ${unsortedRows.toLocaleString('en-GB')} entries unconfirmed)</button>` : '');
   } else if (state.catView.editing) {
-    body.innerHTML = `<div class="chips">${state.data.categories.map(c => `<span class="chip" data-id="${c.id}"><input type="color" value="${c.color}" title="Colour"><input type="text" value="${esc(c.name)}" title="Rename"></span>`).join('')}`
+    body.innerHTML = `<div class="chips">${state.data.categories.map(c => `<span class="chip" data-id="${c.id}"><input type="color" value="${c.color}" title="Colour"><input type="text" value="${esc(c.name)}" title="Rename"><button class="del" title="Delete">×</button></span>`).join('')}`
       + `<button class="chip" id="addCat">+ Add</button></div><button class="editbtn" id="editCats">Done</button>`;
   } else {
     const tot = catTotals(tx);
@@ -1191,6 +1269,7 @@ function buildCats() {
     body.innerHTML = list.map(c => `<div class="crow ${c.n ? '' : 'zero'}" data-cat="${c.id}"><span class="cdot ${c.color ? '' : 'none'}" style="background:${c.color || 'transparent'}"></span>`
       + `<span>${esc(c.name)}</span><span class="st">${c.n ? `${c.n} · ${c.out ? '£' + Core.fmt(c.out) : '+£' + Core.fmt(c.inn)}` : '—'}</span>`
       + `<span class="go"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></div>`).join('')
+      + `<div class="crow add" id="newCatRow"><span>+</span><span>New category</span></div>`
       + `<button class="editbtn" id="editCats">Edit categories</button>`;
   }
   if (state.catView.open != null) renderCatPanel();
@@ -1211,11 +1290,13 @@ $('#catBody').addEventListener('click', e => {
   if (ok) { const row = ok.closest('.prow'); setRule(row.dataset.k, row.querySelector('select').value || null); changed(); return; }
   if (e.target.closest('#moreBtn')) { state.catView.shown += 12; buildCats(); return; }
   if (e.target.closest('#editCats')) { state.catView.editing = !state.catView.editing; buildCats(); return; }
+  const del = e.target.closest('.chip .del');
+  if (del) { deleteCategory(del.closest('.chip').dataset.id); return; }
+  if (e.target.closest('#newCatRow')) { state.catView.editing = true; $('#addCat') || buildCats(); $('#addCat').click(); return; }
   const crow = e.target.closest('.crow');
   if (crow) { openCatPanel(crow.dataset.cat); return; }
   if (e.target.closest('#addCat')) {
-    const id = 'c' + Date.now().toString(36);
-    state.data.categories.push({ id, name: 'New', color: '#8a92a3' });
+    const { id } = newCategory('New category');
     changed(); const inp = $(`.chip[data-id="${id}"] input[type=text]`); if (inp) { inp.focus(); inp.select(); }
   }
 });
@@ -1233,19 +1314,95 @@ function catTotals(tx) {
   return tot;
 }
 
+// ---------- Spending tile: ring by category + monthly bars, for the timeline's range ----------
+let pieChart = null, barChart = null;
+const UNCAT = { id: '', name: 'Uncategorised', color: '#d5d9e1' };
+const catOrUncat = id => catById(id) || UNCAT;
+
+function buildCharts() {
+  if (!state.merged || !window.echarts) return;
+  if (!pieChart) {
+    pieChart = echarts.init($('#pie')); barChart = echarts.init($('#bars'));
+    pieChart.on('click', p => { if (p.data) openCatPanel(p.data.id); });
+    pieChart.on('legendselectchanged', p => {
+      const id = state.data.categories.find(c => c.name === p.name)?.id ?? (p.name === UNCAT.name ? '' : null);
+      if (id == null) return;
+      p.selected[p.name] ? state.chartHidden.delete(id) : state.chartHidden.add(id);
+      ls.set('chartHidden', [...state.chartHidden]);
+      buildCharts();
+    });
+    barChart.on('click', p => {
+      const m = barMonths[p.dataIndex]; if (!m) return;
+      const from = m + '-01', to = Core.addDays(Core.addMonths(from, 1), -1), r = state.view.range;
+      openCatPanel(p.seriesId, { from: r && r.from > from ? r.from : from, to: r && r.to < to ? r.to : to });
+    });
+    window.addEventListener('resize', () => { pieChart.resize(); barChart.resize(); });
+  }
+  const tx = Core.inRange(state.merged.tx, state.view.range);
+  const catFn = t => (state.catOf.get(t.key) || {}).cat;
+  const isRefund = t => t.amount > 0 && state.refunds.has(t.key);
+  const totals = Core.spendTotals(tx, catFn, isRefund);
+  const shown = [...totals].filter(([id]) => !state.chartHidden.has(id)).reduce((a, [, v]) => a + v, 0);
+  const r = state.view.range;
+  $('#spendLbl').textContent = r ? `${shortDate(r.from)} – ${shortDate(r.to)}` : 'All dates';
+
+  const slices = [...totals].map(([id, v]) => { const c = catOrUncat(id); return { id, name: c.name, value: v / 100, itemStyle: { color: c.color } }; })
+    .sort((a, b) => b.value - a.value);
+  const selected = Object.fromEntries(slices.map(x => [x.name, !state.chartHidden.has(x.id)]));
+  pieChart.setOption({
+    animation: false,
+    title: { text: '£' + compact(shown / 100), subtext: 'spent', left: 'center', top: '33%',
+      textStyle: { fontSize: 20, fontWeight: 650, color: '#1d2330' }, subtextStyle: { fontSize: 11, color: '#8a92a3' }, itemGap: 2 },
+    tooltip: { trigger: 'item', confine: true, backgroundColor: '#fff', borderColor: '#e8ebf0', textStyle: { color: '#1d2330', fontSize: 12 },
+      formatter: p => `<b>${esc(p.name)}</b><br>£${Core.fmt(Math.round(p.value * 100))} · ${p.percent}%`,
+      extraCssText: 'box-shadow:0 6px 20px rgba(20,30,50,.12);border-radius:10px;' },
+    legend: { type: 'scroll', bottom: 0, left: 8, right: 8, itemWidth: 9, itemHeight: 9, icon: 'circle', itemGap: 10,
+      textStyle: { fontSize: 11, color: '#4a5263' }, pageIconSize: 9, selected },
+    series: [{ type: 'pie', radius: ['48%', '70%'], center: ['50%', '40%'], avoidLabelOverlap: true, minAngle: 2,
+      itemStyle: { borderColor: '#fff', borderWidth: 2 }, label: { show: false }, emphasis: { scale: true, scaleSize: 5 },
+      data: slices }],
+  }, true);
+
+  const sm = Core.spendByMonth(tx, catFn, isRefund);
+  barMonths = sm.months;
+  const order = [...sm.byCat.keys()].sort((a, b) => (totals.get(b) || 0) - (totals.get(a) || 0));
+  barChart.setOption({
+    animation: false,
+    grid: { left: 8, right: 48, top: 16, bottom: 24 },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(59,110,245,.06)' } }, confine: true,
+      backgroundColor: '#fff', borderColor: '#e8ebf0', textStyle: { color: '#1d2330', fontSize: 12 },
+      extraCssText: 'box-shadow:0 6px 20px rgba(20,30,50,.12);border-radius:10px;',
+      formatter: ps => {
+        const rows = ps.filter(p => p.value > 0).sort((a, b) => b.value - a.value);
+        const sum = rows.reduce((a, p) => a + p.value, 0);
+        return `<b>${esc(ps[0].axisValue)}</b> · £${Core.fmt(Math.round(sum * 100))}<br>` + rows.slice(0, 8).map(p => `${p.marker}${esc(p.seriesName)} £${Core.fmt(Math.round(p.value * 100))}`).join('<br>') + (rows.length > 8 ? `<br><span style="color:#8a92a3">and ${rows.length - 8} more</span>` : '');
+      } },
+    xAxis: { type: 'category', data: sm.months.map(m => `${MONTHS[+m.slice(5) - 1]} ${m.slice(2, 4)}`), axisTick: { show: false },
+      axisLine: { lineStyle: { color: '#e8ebf0' } }, axisLabel: { color: '#8a92a3', fontSize: 11, hideOverlap: true } },
+    yAxis: { type: 'value', position: 'right', splitNumber: 3, axisLabel: { color: '#8a92a3', fontSize: 11, formatter: v => '£' + compact(v) },
+      splitLine: { lineStyle: { color: '#f1f3f6' } } },
+    series: order.filter(id => !state.chartHidden.has(id)).map(id => { const c = catOrUncat(id); return {
+      id, name: c.name, type: 'bar', stack: 'spend', barMaxWidth: 28, itemStyle: { color: c.color }, emphasis: { focus: 'series' },
+      data: sm.byCat.get(id).map(v => v / 100) }; }),
+  }, true);
+}
+let barMonths = [];
+
 // ---------- Category panel: every payment in one category, in the timeline's range ----------
-function openCatPanel(id) {
+function openCatPanel(id, range) {
+  if (pieChart) { pieChart.dispatchAction({ type: 'hideTip' }); barChart.dispatchAction({ type: 'hideTip' }); }
   state.catView.open = id;
+  state.catView.panelRange = range || null;
   renderCatPanel();
   $('#catPanel').classList.add('open'); $('#catPanel').setAttribute('aria-hidden', 'false');
   $('#cpBody').scrollTop = 0;
 }
-function closeCatPanel() { state.catView.open = null; $('#catPanel').classList.remove('open'); $('#catPanel').setAttribute('aria-hidden', 'true'); }
+function closeCatPanel() { state.catView.open = null; state.catView.panelRange = null; $('#catPanel').classList.remove('open'); $('#catPanel').setAttribute('aria-hidden', 'true'); }
 
 function renderCatPanel() {
   const id = state.catView.open;
   if (id == null || !state.merged) return;
-  const c = catById(id), r = state.view.range;
+  const c = catById(id), r = state.catView.panelRange || state.view.range;
   const tx = Core.inRange(state.merged.tx, r).filter(t => ((state.catOf.get(t.key) || {}).cat || '') === id).reverse();
   const out = tx.reduce((a, t) => a + (t.amount < 0 ? -t.amount : 0), 0), inn = tx.reduce((a, t) => a + (t.amount > 0 ? t.amount : 0), 0);
   $('#cpDot').className = 'cdot' + (c ? '' : ' none'); $('#cpDot').style.background = c ? c.color : 'transparent';
@@ -1421,6 +1578,7 @@ document.querySelectorAll('.tile').forEach(tile => {
   tile.querySelector('.chev').onclick = () => {
     tile.classList.toggle('collapsed'); ls.set(k, tile.classList.contains('collapsed'));
     if (chart && tile.dataset.tile === 'timeline') chart.resize();
+    if (pieChart && tile.dataset.tile === 'charts') { pieChart.resize(); barChart.resize(); }
   };
 });
 

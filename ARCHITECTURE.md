@@ -87,12 +87,29 @@ Descriptions are **fixed-width 18-character blocks** (name, town). HSBC replaces
 - **Category panel** (Barry's request): the Categories tab lists each category's count and money out (money in for income-only ones) in the range. Clicking one slides in `#catPanel`, which lists every payment newest first, grouped by month with subtotals. A statement row opens the PDF over it (z-index 9 over 8), and Escape closes the top panel first. The panel re-renders when the range or the categories change.
 - **Saving:** every change is saved 400 ms later. The folder driver writes the file; the copy driver saves in IndexedDB and shows the orange dot.
 
-## 8. Testing with the real sample in the browser pane
+## 8. Spending charts and custom categories
+
+- **Spending** (`spendTotals`, `spendByMonth`) is money out, less credits that `findRefunds` paired as refunds. Pay and money back from savings are not spending.
+- **The months on the bars run through** from the first month in range to the last, including empty ones, so the spacing is true.
+- **Ring:** by category for the timeline's range, with the total of the visible categories in the middle. Clicking a slice opens the category panel.
+- **Hiding a category:** clicking its name in the legend hides it from both charts (`state.chartHidden`, per device in localStorage).
+- **Bars:** stacked by category. Clicking a segment opens the category panel for that month, clipped to the timeline's range (`openCatPanel(id, range)`).
+- **Custom categories:**
+  - "+ New" in the row picker creates a category and assigns it in one step (as a payee rule if "All from" is ticked).
+  - "+ New category" sits in the Categories list.
+  - The ✕ in Edit asks first, then removes the category's rules and tags, so those rows fall back to a guess or to uncategorised.
+  - New categories take colours from `SPARE_COLOURS`, chosen to differ from the 16 starters.
+- **On the sample (6M, 19 Mar – 18 Sep 26):**
+  - The ring total is £29,031.96, against £29,051.96 of money out in the raw CSV. The £20.00 difference is the one Apple refund.
+  - Transfers are £17,661.15, which is 61% of it.
+  - Groceries for July is 10 payments, £480.14, in both the bar tooltip and the panel.
+
+## 9. Testing with the real sample in the browser pane
 
 **ECharts draws only while the browser pane is visible** (show the preview pane first). Start `spending` and `spending-samples`. Then, in the page: fetch the files from `http://localhost:8041/…`, and either `IDB.put('files', …)` plus a `kv/files` index (copy mode, `?store=copy`), or write them into `navigator.storage.getDirectory()` and set `FolderDriver.handle` (folder mode). Then call `loadAll()`.
 **A hidden pane pauses drawing.** Run `drawPages` again once it is visible, and delete the OPFS folder and the `spending` IndexedDB afterwards.
 
-## 9. Build plan
+## 10. Build plan
 
 The plan approved on 19 Oct 2026, one phase per session:
 

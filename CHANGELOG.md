@@ -1,5 +1,24 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-charts
+
+Phase 4: charts, plus custom categories (Barry's request).
+- **Spending tile** under Balance:
+  - A ring by category, with the total spent in the middle.
+  - Monthly bars stacked by category, both for the timeline's range.
+  - Spending is money out less refunds; pay and transfers in are not counted.
+- **Clicking:** a slice opens the category's panel; a bar segment opens it for that month. Clicking a name under the ring hides the category from both charts, remembered per device; for example Transfers, which is 61% of the sample's money out.
+- **Custom categories:** "+ New" in each row's picker (creates and assigns in one step), "+ New category" in the Categories list, and ✕ to delete in Edit (it asks first and says how many payees and choices it affects).
+- **Checked on the sample:**
+  - The ring total equals the raw CSV's money out, less the one £20 refund.
+  - The July Groceries bar and the panel agree (10 payments, £480.14).
+  - A new category from the picker moved all 7 rows of that payee and appeared in the ring; deleting it returned them.
+- **Tests:** 75 of 75 (100%), 4 of them new.
+
+Fixed during the build (found in the renders):
+- A bar tooltip stayed floating over the panel.
+- The first automatic colour for a new category was too close to Eating out's orange.
+
 ## 2026-10-19 — spend-20261019-category-panel
 
 - **Click a category to see its payments** (Barry's request).

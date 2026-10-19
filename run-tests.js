@@ -121,6 +121,19 @@ const eq = (name, got, want) => {
     { key: 3, d: ['WAITROSE'], type: ')))', amount: -5000 }, { key: 4, d: [], type: 'TFR', amount: -9 }], { rules: { WAITROSE: 'other' } });
   eq('payeeSummary', PS.map(p => [p.key, p.n, p.out, p.cat, p.src]), [['WAITROSE', 1, 5000, 'other', 'rule'], ['COSTA', 2, 750, 'coffee', 'guess']]);
 
+  // spending charts: money out less refunds; pay and transfers in are not spending; months run through
+  const ST = [
+    { key: 'a', date: '2026-01-05', amount: -1000, c: 'food' }, { key: 'b', date: '2026-01-20', amount: -500, c: 'food' },
+    { key: 'r', date: '2026-01-21', amount: 500, c: 'food' },                                   // refund of b
+    { key: 'p', date: '2026-01-25', amount: 300000, c: 'income' },                              // pay: not spending
+    { key: 'x', date: '2026-03-02', amount: -2000, c: null }];                                   // uncategorised; Feb empty
+  const cf = t => t.c, rf = t => t.key === 'r';
+  eq('spendTotals', [...Core.spendTotals(ST, cf, rf)], [['food', 1000], ['', 2000]]);
+  const SM = Core.spendByMonth(ST, cf, rf);
+  eq('spendByMonth months run through', SM.months, ['2026-01', '2026-02', '2026-03']);
+  eq('spendByMonth per category', [SM.byCat.get('food'), SM.byCat.get(''), SM.byCat.has('income')], [[1000, 0, 0], [0, 0, 2000], false]);
+  eq('spendByMonth empty', Core.spendByMonth([], cf, rf).months, []);
+
   // ---------- Part 2: Barry's real sample (outside the repo) ----------
   // The expected figures are his own money, so they live beside the samples, never here.
   const dir = process.env.SPENDING_SAMPLES || path.join(os.homedir(), 'Documents', 'Bank Things');
