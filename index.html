@@ -212,6 +212,21 @@ dialog::backdrop { background: rgba(20,30,50,.25); }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 9px 14px; border-radius: 10px; font-size: 13px; z-index: 10; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .toast.on { opacity: .94; pointer-events: auto; }
 .toast button { color: #9fc0ff; font-weight: 600; margin-left: 12px; padding: 0; }
+.rules-h { padding: 14px 14px 4px; font-size: 12px; font-weight: 600; color: #4a5263; letter-spacing: .3px; text-transform: uppercase; border-top: 1px solid var(--line); }
+.rules-h span { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+.trow { display: grid; grid-template-columns: 1fr auto 26px; gap: 10px; align-items: center; padding: 7px 14px; font-size: 13px; border-top: 1px solid #f1f3f6; }
+.trow .tx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trow .tx b { font-weight: 600; }
+.trow .st { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.trow .del { color: var(--muted); font-size: 16px; }
+.trow .del:hover { color: var(--bad); }
+.tadd { display: grid; grid-template-columns: 1fr 150px auto; gap: 8px; padding: 8px 14px 4px; }
+.tadd input, .tadd select { font: inherit; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; background: #fff; color: var(--ink); min-width: 0; outline: none; }
+.tadd input:focus { border-color: var(--accent); }
+.tadd button { font-size: 12.5px; padding: 5px 12px; border-radius: 8px; background: var(--accent); color: #fff; }
+.tprev { color: var(--muted); font-size: 12px; padding: 2px 14px 14px; min-height: 18px; }
+.linkbtn { color: var(--accent); font-size: 12.5px; padding: 0; }
+@media (max-width: 560px) { .tadd { grid-template-columns: 1fr 1fr; } .tadd input { grid-column: 1 / -1; } }
 .sort-hint { color: var(--muted); font-size: 12.5px; padding: 8px 14px 10px; border-top: 1px solid #f1f3f6; }
 </style>
 </head>
@@ -676,10 +691,26 @@ const Core = (() => {
     return line.replace(/\*/g, '').replace(/\s+/g, ' ').trim();
   }
 
-  // own tag > Barry's payee rule > name guess > type guess > none
+  // Text rules: "any payment whose description contains this text". Both sides are compared in
+  // capitals with punctuation removed. HSBC cuts each line to 18 characters, so a line of 12 or more
+  // characters that is the START of the rule's text also matches ("JANE ELIZABETH EXA" matches
+  // "Jane Elizabeth Example").
+  const normText = s => String(s).toUpperCase().replace(/[^A-Z0-9&]+/g, ' ').replace(/\s+/g, ' ').trim();
+  function textRuleMatch(t, rule) {
+    const r = normText(rule.text || '');
+    if (r.length < 3) return false;
+    for (const line of t.d) {
+      const l = normText(line);
+      if (l.includes(r) || (l.length >= 12 && r.startsWith(l))) return true;
+    }
+    return normText(t.d.join(' ')).includes(r);
+  }
+
+  // own tag > text rule > Barry's payee rule > name guess > type guess > none
   function categoryOf(t, data) {
     const tag = data.tags && data.tags[t.key];
     if (tag && tag.cat) return { cat: tag.cat, src: 'tag' };
+    if (data.textRules) for (const r of data.textRules) if (textRuleMatch(t, r)) return { cat: r.cat, src: 'text' };
     const k = payeeKey(t);
     if (k && data.rules && data.rules[k]) return { cat: data.rules[k], src: 'rule' };
     if (k) for (const [re, cat] of NAME_GUESSES) if (re.test(k)) return { cat, src: 'guess' };
@@ -715,7 +746,7 @@ const Core = (() => {
       if (!k) continue;
       if (!by.has(k)) by.set(k, { key: k, n: 0, out: 0, inn: 0, votes: new Map() });
       const p = by.get(k); p.n++; if (t.amount < 0) p.out -= t.amount; else p.inn += t.amount;
-      const c = categoryOf({ ...t, key: null }, { rules: data.rules });
+      const c = categoryOf({ ...t, key: null }, { rules: data.rules, textRules: data.textRules });
       const id = (c.cat || '') + '|' + c.src;
       p.votes.set(id, (p.votes.get(id) || 0) + 1);
     }
@@ -760,14 +791,14 @@ const Core = (() => {
   }
 
   return { PARSER_VERSION, pence, fmt, rowDate, addDays, addMonths, toLines, pdfToPages, parseHsbcPdf, csvRows, parseMidataCsv, merge,
-    dailyBalances, presetRange, inRange, findPaydays, CATEGORIES, payeeKey, categoryOf, findRefunds, payeeSummary, spendTotals, spendByMonth };
+    dailyBalances, presetRange, inRange, findPaydays, CATEGORIES, payeeKey, categoryOf, textRuleMatch, findRefunds, payeeSummary, spendTotals, spendByMonth };
 })();
 if (typeof module !== 'undefined') module.exports = Core;
 </script>
 
 <!-- ================= APP: storage, state, tiles ================= -->
 <script id="app">
-const STAMP = 'spend-20261019-new-from-sort';
+const STAMP = 'spend-20261019-no-example';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
@@ -911,6 +942,7 @@ function readyData(d) {
   if (!Array.isArray(d.categories) || !d.categories.length) d.categories = Core.CATEGORIES.map(c => ({ ...c }));
   if (!d.rules || Array.isArray(d.rules)) d.rules = {};
   if (!d.tags) d.tags = {};
+  if (!Array.isArray(d.textRules)) d.textRules = [];
   return d;
 }
 
@@ -1279,10 +1311,22 @@ function payeeSubList(key, tx) {
   }).join('') + (rows.length > shown ? `<button class="more" data-sub="${esc(key)}">Show ${Math.min(50, rows.length - shown)} more of ${rows.length - shown}</button>` : '') + `</div>`;
 }
 
+// "Any payment whose description contains this text goes in this category" — for payees whose
+// text changes every time (e.g. payments abroad that only share the recipient's name).
+const ruleMatches = r => state.merged ? state.merged.tx.filter(t => Core.textRuleMatch(t, r)).length : 0;
+function textRulesHtml() {
+  const catOpts = state.data.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  return `<div class="rules-h">Text rules<span>any payment whose description contains the text goes in the category, now and in future statements</span></div>`
+    + state.data.textRules.map((r, i) => { const c = catOrUncat(r.cat); return `<div class="trow" data-i="${i}"><span class="tx">contains <b>“${esc(r.text)}”</b> → <span class="cdot" style="background:${c.color};width:9px;height:9px;cursor:default"></span> ${esc(c.name)}</span>`
+      + `<span class="st">${ruleMatches(r)} payments</span><button class="del" title="Remove this rule">×</button></div>`; }).join('')
+    + `<div class="tadd"><input id="trText" placeholder="Text in the description" autocomplete="off"><select id="trCat">${catOpts}</select><button id="trAdd">Add rule</button></div>`
+    + `<div class="tprev" id="trPrev"></div>`;
+}
+
 function buildCats() {
   const body = $('#catBody'); if (!state.merged) return;
   const tx = Core.inRange(state.merged.tx, state.view.range);
-  const todo = Core.payeeSummary(tx, state.data).filter(p => p.src !== 'rule');
+  const todo = Core.payeeSummary(tx, state.data).filter(p => p.src !== 'rule' && p.src !== 'text');
   const unsortedRows = tx.filter(t => { const c = state.catOf.get(t.key); return !c || c.src === 'none' || c.src === 'guess'; }).length;
   $('#sortCount').textContent = todo.length ? todo.length.toLocaleString('en-GB') : '';
   $('#refundBtn').classList.toggle('on', state.catView.refunds);
@@ -1291,7 +1335,7 @@ function buildCats() {
   if (state.catView.tab === 'sort') {
     if (!todo.length) { body.innerHTML = '<div class="empty-note">Every payee in this range has a category.</div>'; return; }
     state.catView.subRows = new Map();
-    body.innerHTML = `<div class="sort-hint">The app has guessed these payees. ✓ keeps the guess, or pick another. Sorted payees leave this list and stay in their category. Click a payee to see its payments.</div>` + todo.slice(0, state.catView.shown).map(p => {
+    body.innerHTML = `<div class="sort-hint">The app has guessed these payees. ✓ keeps the guess, or pick another. Sorted payees leave this list and stay in their category. Click a payee to see its payments. Same person, different text each time? <button class="linkbtn" id="goTextRules">Use a text rule</button></div>` + todo.slice(0, state.catView.shown).map(p => {
       const c = catById(p.cat), open = state.catView.expanded.has(p.key);
       return `<div class="prow ${open ? 'open' : ''}" data-k="${esc(p.key)}"><span class="cdot ${c ? 'guess' : 'none'}" style="background:${c ? c.color : 'transparent'}"></span>`
         + `<span class="nm" title="${esc(p.key)}"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>${esc(p.key)}</span>`
@@ -1313,7 +1357,8 @@ function buildCats() {
       + `<span>${esc(c.name)}</span><span class="st">${c.n ? `${c.n} · ${c.out ? '£' + Core.fmt(c.out) : '+£' + Core.fmt(c.inn)}` : '—'}</span>`
       + `<span class="go"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></div>`).join('')
       + `<div class="crow add" id="newCatRow"><span>+</span><span>New category</span></div>`
-      + `<button class="editbtn" id="editCats">Edit categories</button>`;
+      + `<button class="editbtn" id="editCats">Edit categories</button>`
+      + textRulesHtml();
   }
   if (state.catView.open != null) renderCatPanel();
 }
@@ -1362,6 +1407,22 @@ $('#catBody').addEventListener('click', e => {
     buildCats(); return;
   }
   if (e.target.closest('#editCats')) { state.catView.editing = !state.catView.editing; buildCats(); return; }
+  if (e.target.closest('#goTextRules')) { state.catView.tab = 'list'; state.catView.editing = false; buildCats(); const i = $('#trText'); i.scrollIntoView({ block: 'center' }); i.focus(); return; }
+  if (e.target.closest('#trAdd')) {
+    const text = $('#trText').value.trim(), cat = $('#trCat').value;
+    if (text.length < 3) { toast('Type at least 3 letters'); return; }
+    const rule = { text, cat };
+    state.data.textRules.push(rule); changed();
+    toast(`“${text}” → ${catOrUncat(cat).name}: ${ruleMatches(rule)} payments`, () => { state.data.textRules = state.data.textRules.filter(r => r !== rule); changed(); toast('Rule removed'); });
+    return;
+  }
+  const tdel = e.target.closest('.trow .del');
+  if (tdel) {
+    const i = +tdel.closest('.trow').dataset.i, rule = state.data.textRules[i];
+    state.data.textRules.splice(i, 1); changed();
+    toast(`Removed “${rule.text}”`, () => { state.data.textRules.splice(i, 0, rule); changed(); toast('Rule restored'); });
+    return;
+  }
   const del = e.target.closest('.chip .del');
   if (del) { deleteCategory(del.closest('.chip').dataset.id); return; }
   if (e.target.closest('#newCatRow')) { state.catView.editing = true; $('#addCat') || buildCats(); $('#addCat').click(); return; }
@@ -1372,6 +1433,12 @@ $('#catBody').addEventListener('click', e => {
     changed(); const inp = $(`.chip[data-id="${id}"] input[type=text]`); if (inp) { inp.focus(); inp.select(); }
   }
 });
+$('#catBody').addEventListener('input', e => {
+  if (e.target.id !== 'trText') return;
+  const text = e.target.value.trim();
+  $('#trPrev').textContent = text.length < 3 ? '' : `Would catch ${ruleMatches({ text })} payments`;
+});
+$('#catBody').addEventListener('keydown', e => { if (e.target.id === 'trText' && e.key === 'Enter') $('#trAdd').click(); });
 $('#catTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { state.catView.tab = b.dataset.t; buildCats(); } });
 $('#refundBtn').onclick = () => { state.catView.refunds = !state.catView.refunds; ls.set('refunds', state.catView.refunds); buildCats(); drawRows(); };
 

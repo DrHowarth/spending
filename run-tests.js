@@ -110,6 +110,16 @@ const eq = (name, got, want) => {
   eq('category: masked transfer by type', Core.categoryOf({ key: 'b', d: [], type: 'TFR', amount: -100 }, {}), { cat: 'transfers', src: 'guess' });
   eq('category: unknown', Core.categoryOf({ key: 'c', d: ['YE OLDE MITRE'], type: ')))', amount: -554 }, {}), { cat: null, src: 'none' });
   eq('category: fish bar is takeaway, not pubs', Core.categoryOf({ key: 'd', d: ['SEVENTEEN FISH BAR'], type: ')))', amount: -1 }, {}).cat, 'takeaway');
+  // text rules: description contains text; HSBC's 18-character cut still matches the full name
+  const abroad = d => ({ key: 'z', d, type: 'DR', amount: -20000 });
+  const TR = { textRules: [{ text: 'Jane Elizabeth Example', cat: 'family' }] };
+  eq('text rule: cut name matches full name', Core.categoryOf(abroad(['XX1REF', 'ABC123REF', 'JANE ELIZABETH EXA', '0000001.00000000']), TR), { cat: 'family', src: 'text' });
+  eq('text rule: part of a line matches', Core.categoryOf(abroad(['X', 'TO JANE ELIZABETH EXA']), { textRules: [{ text: 'elizabeth', cat: 'family' }] }).cat, 'family');
+  eq('text rule: no match falls through', Core.categoryOf(abroad(['COSTA']), TR), { cat: 'coffee', src: 'guess' });
+  eq('text rule: short line is not taken as the start of the rule', Core.textRuleMatch(abroad(['JANE']), { text: 'Jane Elizabeth Example' }), false);
+  eq('text rule: beats a payee rule, loses to own tag', [Core.categoryOf({ ...abroad(['JANE ELIZABETH EXA']), key: 'q' }, { ...TR, rules: { 'JANE ELIZABETH EXA': 'gifts' } }).cat,
+    Core.categoryOf({ ...abroad(['JANE ELIZABETH EXA']), key: 'q' }, { ...TR, tags: { q: { cat: 'other' } } }).cat], ['family', 'other']);
+  eq('text rule: under 3 letters never matches', Core.textRuleMatch(abroad(['AB']), { text: 'ab' }), false);
   const R = Core.findRefunds([
     { key: 'p1', date: '2026-01-01', d: ['SHOP'], amount: -2000 }, { key: 'p2', date: '2026-01-05', d: ['SHOP'], amount: -2000 },
     { key: 'r1', date: '2026-01-10', d: ['SHOP'], amount: 2000 },                 // refunds the LATEST matching payment

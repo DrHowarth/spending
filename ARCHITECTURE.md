@@ -69,12 +69,18 @@ Descriptions are **fixed-width 18-character blocks** (name, town). HSBC replaces
 
 - **Who decides, first match wins (`categoryOf`):**
   1. the transaction's own tag (`tags[txKey].cat`)
-  2. Barry's payee rule (`rules[payeeKey]`)
-  3. a built-in name guess (`NAME_GUESSES`, UK merchants)
-  4. a type guess (DD → Bills, ATM → Cash, CR → Income, TFR/SO/BP → Transfers)
-  5. none
+  2. a text rule (`textRules[] {text, cat}`)
+  3. Barry's payee rule (`rules[payeeKey]`)
+  4. a built-in name guess (`NAME_GUESSES`, UK merchants)
+  5. a type guess (DD → Bills, ATM → Cash, CR → Income, TFR/SO/BP → Transfers)
+  6. none
 
   Guesses are drawn as faded dots and are never saved. Only Barry's choices go into `spending-data.json`.
+- **Text rules** (`textRuleMatch`), for payees whose text changes every time, such as payments abroad to one person, where each has a different reference line:
+  - Matching is in capitals with punctuation removed, on any line or on all the lines joined.
+  - Because HSBC cuts lines at 18 characters, a line of 12 or more characters that is the start of the rule's text also matches, so "Jane Elizabeth Example" catches "JANE ELIZABETH EXA".
+  - A rule needs at least 3 letters.
+  - They are managed under Categories → Text rules, with a live "would catch N payments" count, × to remove and Undo. "Sort payees" links there.
 - **`payeeKey`:** the first description line in capitals with only letters and `&` kept, so store numbers and punctuation go. `INT'L` card lines use line 2. A numbers-only line, such as a transfer's sort code and account, keeps its numbers, so two accounts stay separate.
   - HSBC cuts names to 18 characters in both the PDF and the CSV, so both sources give the same key.
   - The CSV masks payees on CR/BP/SO/DR/TFR rows. Those have no key, so they can only take a type guess or a per-row tag.

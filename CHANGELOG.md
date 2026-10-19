@@ -1,5 +1,19 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-no-example
+
+- The text-rule box no longer shows a real person's name as its example (Barry's request). That name, and the reference lines from his statement, are also gone from the tests and notes; the tests use a made-up name with the same 18-character cut.
+
+## 2026-10-19 — spend-20261019-text-rules
+
+- **Text rules** (Barry: payments abroad to one person all have different text except the person's name; file them all in one category, now and in future).
+  - "Any payment whose description contains this text goes in this category."
+  - They beat payee rules; a single payment's own choice still wins.
+  - HSBC cuts lines at 18 characters, so a cut line that starts the rule's text matches too.
+  - Managed in Categories → Text rules, with a live count, remove and Undo. Sort payees has a "Use a text rule" link.
+- **Checked on the sample** with the same cut-name situation: "Seventeen Fish Bar Limited" caught all 8 "SEVENTEEN FISH BAR" payments. Remove and Undo work.
+- **Tests:** 83 of 83 (100%), 6 of them new, including a row shaped like Barry's (name cut at 18 characters).
+
 ## 2026-10-19 — spend-20261019-new-from-sort
 
 - **"+ New category…" at the bottom of every dropdown in Sort payees** (Barry's request). It becomes a name box: Enter creates the category and puts the payee in it (with Undo); Escape cancels.
