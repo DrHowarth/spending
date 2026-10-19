@@ -1,5 +1,13 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-drag-select
+
+- **Drag across the balance chart to select a new window**, which the chart then zooms to (Barry's request).
+- Dragging no longer pans. To pan: drag the slider window, or swipe two fingers sideways on a trackpad (new). Pinch still zooms, and a plain click still jumps the list to that day.
+- **Checked on the sample:**
+  - A sweep chose 15 Feb – 9 Aug 26, within a day of the dates predicted from the pointer positions, and the list showed only those 661 entries.
+  - A swipe moved the window 44 days with its 175-day width kept, and a vertical scroll still scrolls the page.
+
 ## 2026-10-19 — spend-20261019-timeline
 
 Phase 2: the balance timeline.

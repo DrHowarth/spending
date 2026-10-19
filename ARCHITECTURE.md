@@ -53,10 +53,11 @@ Descriptions are **fixed-width 18-character blocks** (name, town). HSBC replaces
 
 - `dailyBalances(tx, cover)`: one day-end balance per calendar day. A day that no statement or CSV covers (`merge().cover`) is `null`, so the step line breaks over a missing month instead of drawing a false flat stretch.
 - Drawn as an ECharts `step: 'end'` line (a value holds until the next day's).
-- Zooming:
-  - `inside` zoom: drag to pan; trackpad pinch (ctrl+wheel) to zoom; shift+wheel to pan.
-  - Plain wheel is deliberately left alone, so the page still scrolls.
-  - `slider` below the chart works as a stock-chart navigator.
+- Zooming (Barry's request: "left-click and hold while sweeping" selects the new window):
+  - **Drag across the chart** (mouse, or one finger) draws an ECharts `brush` (lineX). `onBrushEnd` zooms to it and clears it. A sweep under a day counts as a click, which jumps the list.
+  - So dragging does not pan. To pan: drag the window in the `slider` (the stock-chart navigator), swipe two fingers sideways on a trackpad (`onSwipe`, using wheel deltaX), or shift+wheel.
+  - Pinch (trackpad ctrl+wheel, or touch) zooms. A plain up/down wheel is left to the page, so the page still scrolls.
+  - `brush` needs `takeGlobalCursor` again after every `setOption(…, true)`; `buildTimeline` does it.
 - **The zoomed window is the app's date range:** `readZoom` → `state.view.range` (`null` means everything). Every tile filters with `Core.inRange`, so later tiles must read it, not keep their own.
 - **Presets** (`presetRange`): 1M/3M/6M/1Y end on the last day of data. A hand drag clears the preset. A rebuild keeps a dragged window. `applyPreset` cancels the chart's own echo of its action, or the echo would clear the preset.
 - **Paydays** (`findPaydays`): the credit amount (within 5%) that recurs in the most different months, at most one per month, at least 3 months. It reads amounts, not names, because the CSV hides payers.

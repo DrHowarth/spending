@@ -57,7 +57,7 @@ main { padding: 4px 16px 32px; max-width: 1200px; margin: 0 auto; display: grid;
 .toggle { width: 30px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--faint); }
 .toggle svg { width: 16px; height: 16px; }
 .toggle.on { color: var(--in); }
-#chart { height: 250px; margin: 0 4px 2px; }
+#chart { height: 250px; margin: 0 4px 2px; cursor: crosshair; touch-action: pan-y; }
 @media (max-width: 560px) { #chart { height: 200px; } .range { width: 100%; order: 9; padding-left: 34px; } }
 .tip b { display: block; margin-bottom: 2px; }
 .tip .bal { font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
@@ -538,7 +538,7 @@ if (typeof module !== 'undefined') module.exports = Core;
 
 <!-- ================= APP: storage, state, tiles ================= -->
 <script id="app">
-const STAMP = 'spend-20261019-timeline';
+const STAMP = 'spend-20261019-drag-select';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
@@ -806,6 +806,8 @@ function buildTimeline() {
   if (!chart) {
     chart = echarts.init($('#chart'), null, { renderer: 'canvas' });
     chart.on('datazoom', () => { clearTimeout(zoomT); zoomT = setTimeout(readZoom, 90); });
+    chart.on('brushEnd', onBrushEnd);
+    $('#chart').addEventListener('wheel', onSwipe, { passive: false });
     chart.getZr().on('click', e => {
       if (!chart.containPixel({ gridIndex: 0 }, [e.offsetX, e.offsetY])) return;
       const [x] = chart.convertFromPixel({ gridIndex: 0 }, [e.offsetX, e.offsetY]);
@@ -825,12 +827,16 @@ function buildTimeline() {
       textStyle: { color: '#1d2330', fontSize: 12 }, extraCssText: 'box-shadow:0 6px 20px rgba(20,30,50,.12);border-radius:10px;',
       axisPointer: { type: 'line', lineStyle: { color: '#c3c8d2' } } },
     dataZoom: [
-      { type: 'inside', zoomOnMouseWheel: 'ctrl', moveOnMouseWheel: 'shift', moveOnMouseMove: true, minValueSpan: 7 * DAY },
+      { type: 'inside', zoomOnMouseWheel: 'ctrl', moveOnMouseWheel: 'shift', moveOnMouseMove: false, moveOnTouch: false, minValueSpan: 7 * DAY },
       { type: 'slider', height: 22, bottom: 8, left: 10, right: 52, showDetail: false, brushSelect: false, minValueSpan: 7 * DAY,
         borderColor: 'transparent', backgroundColor: '#f6f7f9', fillerColor: 'rgba(59,110,245,.10)',
         handleStyle: { color: '#fff', borderColor: '#c3c8d2' }, moveHandleSize: 0,
         dataBackground: { lineStyle: { color: '#c3c8d2', width: 1 }, areaStyle: { color: '#eef0f4' } },
         selectedDataBackground: { lineStyle: { color: blue, width: 1 }, areaStyle: { color: 'rgba(59,110,245,.12)' } } }],
+    // drag across the chart to select a new window (see onBrushEnd)
+    toolbox: { show: false, feature: { brush: { type: ['lineX'] } } },
+    brush: { xAxisIndex: 0, brushType: 'lineX', brushMode: 'single', transformable: false, removeOnClick: true,
+      brushStyle: { color: 'rgba(59,110,245,.13)', borderColor: 'rgba(59,110,245,.55)', borderWidth: 1 }, outOfBrush: { colorAlpha: 1 } },
     series: [
       { type: 'line', step: 'end', showSymbol: false, connectNulls: false, emphasis: { disabled: true },
         data: days.map(d => [tsOf(d.date), d.bal == null ? null : d.bal / 100]),
@@ -840,9 +846,30 @@ function buildTimeline() {
         data: state.view.paydays ? state.paydays.map(t => [tsOf(t.date), dayEnd.get(t.date) / 100]) : [] }],
   }, true);
   $('#payBtn').classList.toggle('on', state.view.paydays);
+  chart.dispatchAction({ type: 'takeGlobalCursor', key: 'brush', brushOption: { brushType: 'lineX', brushMode: 'single' } });
   // a rebuild (paydays switched, folder re-read) keeps a hand-dragged window instead of jumping to a preset
   if (state.view.preset || !state.view.range) applyPreset(state.view.preset || 'All');
   else chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, startValue: tsOf(state.view.range.from), endValue: tsOf(state.view.range.to) });
+}
+
+// A sweep shorter than a day is a click (handled by jumpToDate), not a selection.
+function onBrushEnd(e) {
+  const area = e.areas && e.areas[0];
+  chart.dispatchAction({ type: 'brush', areas: [] });
+  if (!area || !area.coordRange) return;
+  const [a, b] = area.coordRange.map(Number);
+  if (Math.abs(b - a) < DAY) return;
+  chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, startValue: Math.min(a, b), endValue: Math.max(a, b) });
+}
+
+// Two-finger sideways swipe pans; pinch (ctrl+wheel) is ECharts' own zoom; plain up/down scroll is left to the page.
+function onSwipe(e) {
+  if (e.ctrlKey || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+  e.preventDefault();
+  const dz = chart.getOption().dataZoom[0], width = dz.end - dz.start;
+  const shift = e.deltaX / $('#chart').clientWidth * width;
+  const start = Math.min(Math.max(dz.start + shift, 0), 100 - width);
+  chart.dispatchAction({ type: 'dataZoom', dataZoomIndex: 0, start, end: start + width });
 }
 
 function tip(params) {
