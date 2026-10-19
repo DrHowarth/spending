@@ -1,5 +1,16 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-category-panel
+
+- **Click a category to see its payments** (Barry's request).
+  - The Categories tab now lists every category with its count and total for the timeline's range, plus "Uncategorised". Renaming and recolouring moved behind "Edit categories".
+  - The slide-in panel lists the payments newest first, by month with subtotals. A statement payment opens its PDF on top.
+- **Checked on the sample (3M):**
+  - The category counts add up to the 438 transactions in range.
+  - Coffee shows 50 payments; its monthly subtotals sum to the header total.
+  - 13 Aug Costa Coffee opened on page 8, highlighted.
+- Income-only categories show money in (+£) rather than £0.00 out.
+
 ## 2026-10-19 — spend-20261019-categories
 
 Phase 3: categories.

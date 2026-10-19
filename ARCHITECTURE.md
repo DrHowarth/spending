@@ -84,6 +84,7 @@ Descriptions are **fixed-width 18-character blocks** (name, town). HSBC replaces
   - The guesses cover 996 of 1,451 rows (68.6%).
   - There is 1 refund pair (Apple, £20).
   - The top 50 of 218 card, direct debit and cash-machine payees cover 83% of those payments.
+- **Category panel** (Barry's request): the Categories tab lists each category's count and money out (money in for income-only ones) in the range. Clicking one slides in `#catPanel`, which lists every payment newest first, grouped by month with subtotals. A statement row opens the PDF over it (z-index 9 over 8), and Escape closes the top panel first. The panel re-renders when the range or the categories change.
 - **Saving:** every change is saved 400 ms later. The folder driver writes the file; the copy driver saves in IndexedDB and shows the orange dot.
 
 ## 8. Testing with the real sample in the browser pane

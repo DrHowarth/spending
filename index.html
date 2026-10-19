@@ -140,8 +140,29 @@ main { padding: 4px 16px 32px; max-width: 1200px; margin: 0 auto; display: grid;
 .empty p { color: var(--muted); font-size: 12.5px; margin-top: 14px; }
 
 /* pdf panel */
-#pdfPanel { position: fixed; top: 0; right: 0; bottom: 0; width: min(680px, 100vw); background: #eef0f4; box-shadow: -12px 0 32px rgba(20,30,50,.14); transform: translateX(105%); transition: transform .22s ease; z-index: 8; display: flex; flex-direction: column; }
-#pdfPanel.open { transform: none; }
+#pdfPanel, #catPanel { position: fixed; top: 0; right: 0; bottom: 0; width: min(680px, 100vw); background: #eef0f4; box-shadow: -12px 0 32px rgba(20,30,50,.14); transform: translateX(105%); transition: transform .22s ease; z-index: 9; display: flex; flex-direction: column; }
+#catPanel { width: min(500px, 100vw); background: var(--card); z-index: 8; }
+#pdfPanel.open, #catPanel.open { transform: none; }
+#catPanel .pdf-h .cdot { width: 14px; height: 14px; cursor: default; }
+.cp-b { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 24px; }
+.cp-m { display: flex; justify-content: space-between; padding: 14px 16px 6px; font-size: 12px; font-weight: 600; color: #4a5263; letter-spacing: .3px; text-transform: uppercase; position: sticky; top: 0; background: var(--card); }
+.cp-m span:last-child { font-variant-numeric: tabular-nums; text-transform: none; }
+.cp-r { display: grid; grid-template-columns: 52px 1fr auto; gap: 10px; padding: 8px 16px; border-top: 1px solid #f1f3f6; font-size: 13px; align-items: center; }
+.cp-r.pdf { cursor: pointer; }
+.cp-r.pdf:hover { background: #f8f9fb; }
+.cp-r.refund { background: #f4effd; }
+.cp-r .d { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.cp-r .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-r .nm i { font-style: normal; color: var(--muted); margin-left: 6px; }
+.cp-r .a { text-align: right; font-variant-numeric: tabular-nums; }
+.cp-r .a.in { color: var(--in); font-weight: 600; }
+.crow { display: grid; grid-template-columns: 14px 1fr auto 18px; align-items: center; gap: 10px; padding: 9px 14px; border-top: 1px solid #f1f3f6; font-size: 13px; cursor: pointer; }
+.crow:hover { background: #f8f9fb; }
+.crow .st { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.crow .go { color: var(--faint); }
+.crow.zero { opacity: .5; }
+.editbtn { display: block; margin: 6px 14px 12px auto; font-size: 12px; color: var(--muted); padding: 4px 8px; border-radius: 7px; }
+.editbtn:hover { background: var(--bg); color: var(--ink); }
 .pdf-h { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
 .pdf-h .name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pdf-h .sub { color: var(--muted); font-size: 12px; white-space: nowrap; }
@@ -223,6 +244,15 @@ dialog::backdrop { background: rgba(20,30,50,.25); }
 </main>
 
 <div id="picker" class="hidden"></div>
+
+<aside id="catPanel" aria-hidden="true">
+  <div class="pdf-h">
+    <span class="cdot" id="cpDot"></span>
+    <div style="min-width:0;flex:1"><div class="name" id="cpName"></div><div class="sub" id="cpSub"></div></div>
+    <button class="icon" id="cpClose" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="cp-b" id="cpBody"></div>
+</aside>
 
 <aside id="pdfPanel" aria-hidden="true">
   <div class="pdf-h">
@@ -666,7 +696,7 @@ if (typeof module !== 'undefined') module.exports = Core;
 
 <!-- ================= APP: storage, state, tiles ================= -->
 <script id="app">
-const STAMP = 'spend-20261019-categories';
+const STAMP = 'spend-20261019-category-panel';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
@@ -800,7 +830,7 @@ const state = {
   dirty: false,
   view: { desc: ls.get('sortDesc', true), q: '', rows: [], sel: null, range: null, preset: ls.get('preset', '1Y'), paydays: ls.get('paydays', true) },
   paydays: [], byDay: new Map(), catOf: new Map(), refunds: new Map(),
-  catView: { tab: 'sort', shown: 12, refunds: ls.get('refunds', true) },
+  catView: { tab: 'sort', shown: 12, refunds: ls.get('refunds', true), editing: false, open: null },
 };
 
 function blankData() { return { version: 1, savedAt: null, categories: [], rules: {}, tags: {}, prefs: {} }; }
@@ -1149,10 +1179,21 @@ function buildCats() {
         + (c ? `<button class="ok" title="Keep ${esc(c.name)}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></button>` : '<span></span>')
         + `</div>`;
     }).join('') + (todo.length > state.catView.shown ? `<button class="more" id="moreBtn">Show more (${todo.length - state.catView.shown} left · ${unsortedRows.toLocaleString('en-GB')} entries unconfirmed)</button>` : '');
-  } else {
+  } else if (state.catView.editing) {
     body.innerHTML = `<div class="chips">${state.data.categories.map(c => `<span class="chip" data-id="${c.id}"><input type="color" value="${c.color}" title="Colour"><input type="text" value="${esc(c.name)}" title="Rename"></span>`).join('')}`
-      + `<button class="chip" id="addCat">+ Add</button></div>`;
+      + `<button class="chip" id="addCat">+ Add</button></div><button class="editbtn" id="editCats">Done</button>`;
+  } else {
+    const tot = catTotals(tx);
+    const list = [...state.data.categories.map(c => ({ id: c.id, name: c.name, color: c.color })), { id: '', name: 'Uncategorised', color: null }]
+      .map(c => ({ ...c, ...(tot.get(c.id) || { n: 0, out: 0, inn: 0 }) }))
+      .filter(c => c.n || c.id)
+      .sort((a, b) => b.out - a.out || b.inn - a.inn || b.n - a.n);
+    body.innerHTML = list.map(c => `<div class="crow ${c.n ? '' : 'zero'}" data-cat="${c.id}"><span class="cdot ${c.color ? '' : 'none'}" style="background:${c.color || 'transparent'}"></span>`
+      + `<span>${esc(c.name)}</span><span class="st">${c.n ? `${c.n} · ${c.out ? '£' + Core.fmt(c.out) : '+£' + Core.fmt(c.inn)}` : '—'}</span>`
+      + `<span class="go"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></div>`).join('')
+      + `<button class="editbtn" id="editCats">Edit categories</button>`;
   }
+  if (state.catView.open != null) renderCatPanel();
 }
 $('#catBody').addEventListener('change', e => {
   const row = e.target.closest('.prow');
@@ -1169,6 +1210,9 @@ $('#catBody').addEventListener('click', e => {
   const ok = e.target.closest('.ok');
   if (ok) { const row = ok.closest('.prow'); setRule(row.dataset.k, row.querySelector('select').value || null); changed(); return; }
   if (e.target.closest('#moreBtn')) { state.catView.shown += 12; buildCats(); return; }
+  if (e.target.closest('#editCats')) { state.catView.editing = !state.catView.editing; buildCats(); return; }
+  const crow = e.target.closest('.crow');
+  if (crow) { openCatPanel(crow.dataset.cat); return; }
   if (e.target.closest('#addCat')) {
     const id = 'c' + Date.now().toString(36);
     state.data.categories.push({ id, name: 'New', color: '#8a92a3' });
@@ -1177,6 +1221,55 @@ $('#catBody').addEventListener('click', e => {
 });
 $('#catTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { state.catView.tab = b.dataset.t; buildCats(); } });
 $('#refundBtn').onclick = () => { state.catView.refunds = !state.catView.refunds; ls.set('refunds', state.catView.refunds); buildCats(); drawRows(); };
+
+// Totals per category id ('' = uncategorised) for a set of transactions.
+function catTotals(tx) {
+  const tot = new Map();
+  for (const t of tx) {
+    const id = (state.catOf.get(t.key) || {}).cat || '';
+    if (!tot.has(id)) tot.set(id, { n: 0, out: 0, inn: 0 });
+    const x = tot.get(id); x.n++; if (t.amount < 0) x.out -= t.amount; else x.inn += t.amount;
+  }
+  return tot;
+}
+
+// ---------- Category panel: every payment in one category, in the timeline's range ----------
+function openCatPanel(id) {
+  state.catView.open = id;
+  renderCatPanel();
+  $('#catPanel').classList.add('open'); $('#catPanel').setAttribute('aria-hidden', 'false');
+  $('#cpBody').scrollTop = 0;
+}
+function closeCatPanel() { state.catView.open = null; $('#catPanel').classList.remove('open'); $('#catPanel').setAttribute('aria-hidden', 'true'); }
+
+function renderCatPanel() {
+  const id = state.catView.open;
+  if (id == null || !state.merged) return;
+  const c = catById(id), r = state.view.range;
+  const tx = Core.inRange(state.merged.tx, r).filter(t => ((state.catOf.get(t.key) || {}).cat || '') === id).reverse();
+  const out = tx.reduce((a, t) => a + (t.amount < 0 ? -t.amount : 0), 0), inn = tx.reduce((a, t) => a + (t.amount > 0 ? t.amount : 0), 0);
+  $('#cpDot').className = 'cdot' + (c ? '' : ' none'); $('#cpDot').style.background = c ? c.color : 'transparent';
+  $('#cpName').textContent = c ? c.name : 'Uncategorised';
+  $('#cpSub').textContent = `${r ? shortDate(r.from) + ' – ' + shortDate(r.to) : 'All dates'} · ${tx.length} · £${Core.fmt(out)} out${inn ? ` · £${Core.fmt(inn)} in` : ''}`;
+  let h = '', month = null;
+  const monthTotal = m => tx.filter(t => t.date.slice(0, 7) === m).reduce((a, t) => a + t.amount, 0);
+  tx.forEach((t, i) => {
+    const m = t.date.slice(0, 7);
+    if (m !== month) { month = m; h += `<div class="cp-m"><span>${MONTHS[+m.slice(5) - 1]} ${m.slice(0, 4)}</span><span>${Core.fmt(monthTotal(m), true)}</span></div>`; }
+    const partner = state.catView.refunds && state.refunds.get(t.key);
+    h += `<div class="cp-r ${t.src} ${partner ? 'refund' : ''}" data-i="${i}" title="${t.src === 'pdf' ? 'Show on statement' : 'From CSV'}">`
+      + `<span class="d">${+t.date.slice(8)} ${MONTHS[+t.date.slice(5, 7) - 1]}</span>`
+      + `<span class="nm">${t.d.length ? esc(t.d[0]) : esc(TYPES[t.type] || t.type)}${t.d.length > 1 ? `<i>${esc(t.d.slice(1).join(' · '))}</i>` : ''}</span>`
+      + `<span class="a ${t.amount > 0 ? 'in' : ''}">${Core.fmt(t.amount, true)}</span></div>`;
+  });
+  $('#cpBody').innerHTML = h || '<div class="empty-note">Nothing in this category in the selected dates.</div>';
+  $('#cpBody').onclick = e => {
+    const row = e.target.closest('.cp-r'); if (!row) return;
+    const t = tx[+row.dataset.i];
+    if (t.src === 'pdf') openPdf(t); else toast('From the CSV — no statement for this month yet');
+  };
+}
+$('#cpClose').onclick = closeCatPanel;
 
 // ---------- PDF panel ----------
 // Pages are laid out (sized) first and the highlight placed at once; drawing happens after,
@@ -1310,7 +1403,7 @@ $('#btnSave').onclick = exportData;
 $('#pdfClose').onclick = closePdf;
 $('#presets').addEventListener('click', e => { const b = e.target.closest('button'); if (b) applyPreset(b.dataset.p); });
 $('#payBtn').onclick = () => { state.view.paydays = !state.view.paydays; ls.set('paydays', state.view.paydays); buildTimeline(); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (pickFor) closePicker(); else closePdf(); } });
+document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (pickFor) closePicker(); else if ($('#pdfPanel').classList.contains('open')) closePdf(); else closeCatPanel(); });
 $('#txList').addEventListener('scroll', () => requestAnimationFrame(drawRows), { passive: true });
 window.addEventListener('resize', () => drawRows());
 $('#q').addEventListener('input', e => { state.view.q = e.target.value; $('#txList').scrollTop = 0; buildRows(); });
