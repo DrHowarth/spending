@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spending</title>
+<meta name="theme-color" content="#f6f7f9">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<script src="vendor/pdf.js"></script>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --ink: #1d2330; --muted: #8a92a3; --faint: #c3c8d2;
+  --line: #e8ebf0; --accent: #3b6ef5; --in: #17905a; --bad: #d64545; --warn: #d39b00;
+  --hl: rgba(255, 207, 0, .38); --hl-edge: #e3b400; --lilac: #c9b6f2;
+  --r: 14px; --row: 40px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.hidden { display: none !important; }
+
+/* top bar */
+.bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 4px; padding: 10px 16px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); }
+.brand { font-weight: 650; letter-spacing: .2px; display: flex; align-items: center; gap: 8px; }
+.brand i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); display: inline-block; }
+.spacer { flex: 1; }
+.status { color: var(--muted); font-size: 12.5px; margin-right: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: #4a5263; position: relative; }
+.icon:hover { background: var(--line); }
+.icon svg { width: 18px; height: 18px; }
+.icon.dot::after { content: ""; position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+#progress { position: fixed; top: 0; left: 0; height: 2px; width: 0; background: var(--accent); transition: width .2s; z-index: 9; }
+
+/* tiles */
+main { padding: 4px 16px 32px; max-width: 1200px; margin: 0 auto; display: grid; gap: 14px; }
+.tile { background: var(--card); border-radius: var(--r); box-shadow: 0 1px 2px rgba(20,30,50,.05), 0 0 0 1px var(--line); overflow: hidden; }
+.tile-h { display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px 8px; }
+.tile-h h2 { margin: 0; font-size: 13px; font-weight: 600; color: #4a5263; letter-spacing: .3px; text-transform: uppercase; }
+.chev { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; color: var(--muted); transition: transform .15s; }
+.chev svg { width: 14px; height: 14px; }
+.tile.collapsed .chev { transform: rotate(-90deg); }
+.tile.collapsed .tile-b { display: none; }
+.tile-h input[type=search] { margin-left: auto; width: min(220px, 45vw); border: 1px solid var(--line); background: var(--bg); border-radius: 9px; padding: 6px 10px; font: inherit; color: var(--ink); outline: none; }
+.tile-h input[type=search]:focus { border-color: var(--accent); background: #fff; }
+.count { color: var(--muted); font-size: 12px; }
+
+/* transaction list (windowed) */
+.vlist { height: min(62vh, 640px); overflow-y: auto; position: relative; border-top: 1px solid var(--line); -webkit-overflow-scrolling: touch; }
+.vspace { position: relative; }
+.vwin { position: absolute; left: 0; right: 0; top: 0; }
+.row { height: var(--row); display: grid; grid-template-columns: 78px 1fr 34px 96px 92px; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid #f1f3f6; cursor: default; }
+.row.pdf { cursor: pointer; }
+.row:hover { background: #f8f9fb; }
+.row.sel { background: #fff8d6; }
+.row .d { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.row .desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .desc i { font-style: normal; color: var(--muted); margin-left: 6px; }
+.row .ty { font-size: 10.5px; color: var(--muted); text-align: center; border-radius: 6px; background: #f2f4f7; padding: 1px 0; }
+.row .amt, .row .bal { text-align: right; font-variant-numeric: tabular-nums; }
+.row .amt.in { color: var(--in); font-weight: 600; }
+.row .bal { color: var(--muted); font-size: 12.5px; }
+.row .desc .none { color: var(--muted); font-style: italic; }
+.row .d { white-space: nowrap; }
+.row.flag { box-shadow: inset 3px 0 var(--bad); }
+.list-h { display: grid; grid-template-columns: 78px 1fr 34px 96px 92px; gap: 8px; padding: 4px 14px 6px; font-size: 11px; color: var(--muted); }
+.list-h span:nth-child(n+4) { text-align: right; }
+.list-h button { color: var(--muted); font-size: 11px; padding: 0; }
+@media (max-width: 560px) {
+  .row, .list-h { grid-template-columns: 54px 1fr 80px; }
+  .row .ty, .row .bal, .list-h .ty, .list-h .bal { display: none; }
+}
+
+/* empty state */
+.empty { min-height: 70vh; display: grid; place-items: center; text-align: center; padding: 16px; }
+.empty .big { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 14px; background: var(--accent); color: #fff; font-weight: 600; font-size: 15px; box-shadow: 0 6px 18px rgba(59,110,245,.25); }
+.empty .big svg { width: 20px; height: 20px; }
+.empty p { color: var(--muted); font-size: 12.5px; margin-top: 14px; }
+
+/* pdf panel */
+#pdfPanel { position: fixed; top: 0; right: 0; bottom: 0; width: min(680px, 100vw); background: #eef0f4; box-shadow: -12px 0 32px rgba(20,30,50,.14); transform: translateX(105%); transition: transform .22s ease; z-index: 8; display: flex; flex-direction: column; }
+#pdfPanel.open { transform: none; }
+.pdf-h { display: flex; align-items: center; gap: 8px; padding: 10px 10px 10px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
+.pdf-h .name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pdf-h .sub { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.pdf-b { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; padding: 12px; -webkit-overflow-scrolling: touch; }
+.page { position: relative; margin: 0 auto 12px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.page canvas { display: block; width: 100%; height: 100%; position: absolute; inset: 0; }
+.hlbox { position: absolute; background: var(--hl); outline: 1.5px solid var(--hl-edge); border-radius: 3px; mix-blend-mode: multiply; pointer-events: none; animation: pulse 1.2s ease 2; }
+@keyframes pulse { 50% { outline-width: 4px; } }
+
+/* system panel */
+dialog { border: 0; border-radius: 16px; padding: 0; width: min(620px, calc(100vw - 32px)); box-shadow: 0 20px 60px rgba(20,30,50,.25); color: var(--ink); }
+dialog::backdrop { background: rgba(20,30,50,.25); }
+.sys { padding: 18px 20px 20px; }
+.sys h3 { margin: 0 0 4px; font-size: 15px; }
+.sys .stamp { font: 12px ui-monospace, Menlo, monospace; color: var(--muted); }
+.sys table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12.5px; }
+.sys td, .sys th { padding: 5px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.sys th { color: var(--muted); font-weight: 500; }
+.sys .num { text-align: right; font-variant-numeric: tabular-nums; }
+.sys .btns { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.sys .btns button { padding: 8px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.sys .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
+.sys details { margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 9px 14px; border-radius: 10px; font-size: 13px; z-index: 10; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.on { opacity: .94; }
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<header class="bar">
+  <div class="brand"><i></i>Spending</div>
+  <div class="spacer"></div>
+  <span id="status" class="status"></span>
+  <button id="btnSave" class="icon dot hidden" title="Save data file to your folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg></button>
+  <button id="btnReload" class="icon hidden" title="Re-read folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"/></svg></button>
+  <button id="btnFolder" class="icon" title="Choose statements folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+  <button id="btnSystem" class="icon" title="System"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></button>
+</header>
+
+<div id="empty" class="empty hidden">
+  <div>
+    <button id="btnStart" class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Choose statements folder</span></button>
+    <p>Your statements stay on this device.</p>
+  </div>
+</div>
+
+<main id="tiles" class="hidden">
+  <section class="tile" data-tile="tx">
+    <div class="tile-h">
+      <button class="chev" title="Collapse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+      <h2>Transactions</h2><span class="count" id="txCount"></span>
+      <input type="search" id="q" placeholder="Search" autocomplete="off">
+    </div>
+    <div class="tile-b">
+      <div class="list-h"><span><button id="sortBtn" title="Reverse order">Date ↓</button></span><span></span><span class="ty"></span><span>£</span><span class="bal">Balance</span></div>
+      <div class="vlist" id="txList"><div class="vspace"><div class="vwin"></div></div></div>
+    </div>
+  </section>
+</main>
+
+<aside id="pdfPanel" aria-hidden="true">
+  <div class="pdf-h">
+    <div style="min-width:0;flex:1"><div class="name" id="pdfName"></div><div class="sub" id="pdfSub"></div></div>
+    <button class="icon" id="pdfClose" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="pdf-b" id="pdfBody"></div>
+</aside>
+
+<dialog id="sysDlg"><div class="sys" id="sysBody"></div></dialog>
+<div class="toast" id="toast"></div>
+
+<!-- ================= CORE: pure data layer. No DOM. Tested headlessly by run-tests.js ================= -->
+<script id="core">
+const Core = (() => {
+  const PARSER_VERSION = 2;
+  const MON = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+  const pad = n => String(n).padStart(2, '0');
+  const isoOf = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}`;
+  const sq = s => s.replace(/\s+/g, '').toLowerCase();
+  const MONEY = /^\d{1,3}(,\d{3})*\.\d\d$/;
+
+  function addDays(iso, n) {
+    const t = new Date(iso + 'T00:00:00Z');
+    t.setUTCDate(t.getUTCDate() + n);
+    return t.toISOString().slice(0, 10);
+  }
+
+  // "£1,234.56", "-£2.25", "+£216.20", "453.1 7" -> integer pence (all money is held in pence)
+  function pence(s) {
+    if (s == null) return null;
+    const m = /^([+-]?)(\d+)(?:\.(\d{1,2}))?$/.exec(String(s).replace(/[£,\s]/g, ''));
+    if (!m) return null;
+    const v = parseInt(m[2], 10) * 100 + parseInt(((m[3] || '') + '00').slice(0, 2), 10);
+    return m[1] === '-' ? -v : v;
+  }
+
+  function fmt(p, signed) {
+    const s = (Math.abs(p) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return (p < 0 ? '−' : signed && p > 0 ? '+' : '') + s;
+  }
+
+  // "16 Jul 26" -> "2026-07-16"
+  function rowDate(s) {
+    const m = /^(\d{1,2}) ([A-Za-z]{3}) (\d{2})$/.exec(s.trim());
+    if (!m || MON[m[2].toLowerCase()] == null) return null;
+    return isoOf(2000 + +m[3], MON[m[2].toLowerCase()], +m[1]);
+  }
+
+  // pdf.js document -> pages of text items in top-down page units (scale 1)
+  async function pdfToPages(doc) {
+    const pages = [];
+    for (let n = 1; n <= doc.numPages; n++) {
+      const pg = await doc.getPage(n);
+      const vp = pg.getViewport({ scale: 1 });
+      const tc = await pg.getTextContent();
+      const items = [];
+      for (const i of tc.items) {
+        if (!i.str || !i.str.trim()) continue;
+        const [x, y] = vp.convertToViewportPoint(i.transform[4], i.transform[5]);
+        items.push({ s: i.str.trim(), x, y, w: i.width, h: i.height || Math.hypot(i.transform[2], i.transform[3]) });
+      }
+      pages.push({ n, w: vp.width, h: vp.height, items });
+      pg.cleanup();
+    }
+    return pages;
+  }
+
+  // Group items into lines (same baseline), then join runs into cells.
+  // HSBC draws bold text one letter per item, so letters closer than 6pt are one cell,
+  // and a gap over 1.2pt inside a cell is a word space.
+  function toLines(items) {
+    const sorted = items.slice().sort((a, b) => a.y - b.y || a.x - b.x);
+    const lines = [];
+    for (const it of sorted) {
+      let L = lines[lines.length - 1];
+      if (!L || Math.abs(L.y - it.y) >= 2) { L = { y: it.y, h: it.h, items: [] }; lines.push(L); }
+      L.items.push(it); L.h = Math.max(L.h, it.h);
+    }
+    for (const L of lines) {
+      L.items.sort((a, b) => a.x - b.x);
+      L.cells = [];
+      let c = null;
+      for (const it of L.items) {
+        const gap = c ? it.x - c.x1 : Infinity;
+        if (c && gap < 6) { c.s += (gap > 1.2 ? ' ' : '') + it.s; c.x1 = Math.max(c.x1, it.x + it.w); }
+        else { c = { s: it.s, x: it.x, x1: it.x + it.w }; L.cells.push(c); }
+      }
+      L.text = L.cells.map(c => c.s).join(' ');
+    }
+    return lines;
+  }
+
+  // HSBC current-account statement. Columns are read from each page's header line, not hard-coded.
+  function parseHsbcPdf(pages) {
+    const R = { kind: 'pdf', parser: PARSER_VERSION, period: null, summary: {}, opening: null, closing: null, tx: [], issues: [], checks: {}, ok: false };
+    const P = pages.map(p => ({ ...p, lines: toLines(p.items) }));
+
+    for (const p of P) for (const L of p.lines) {
+      if (R.period) break;
+      const m = /(\d{1,2}) ([A-Za-z]+)(?: (\d{4}))? to (\d{1,2}) ([A-Za-z]+) (\d{4})/.exec(L.text);
+      if (!m) continue;
+      const m1 = MON[m[2].slice(0, 3).toLowerCase()], m2 = MON[m[5].slice(0, 3).toLowerCase()];
+      if (m1 == null || m2 == null) continue;
+      const y2 = +m[6], y1 = m[3] ? +m[3] : (m1 > m2 ? y2 - 1 : y2);
+      R.period = { from: isoOf(y1, m1, +m[1]), to: isoOf(y2, m2, +m[4]) };
+    }
+    if (P[0]) for (const L of P[0].lines) {
+      const t = sq(L.text);
+      for (const [k, label] of [['opening', 'openingbalance'], ['in', 'paymentsin'], ['out', 'paymentsout'], ['closing', 'closingbalance']]) {
+        const m = new RegExp(label + '£?([\\d,]+\\.\\d\\d)(o?d)?').exec(t);
+        if (m && R.summary[k] == null) R.summary[k] = pence(m[1]) * (m[2] ? -1 : 1);
+      }
+    }
+
+    let running = null, cur = null, date = null;
+    const days = { ok: 0, total: 0 };
+    const finish = () => { if (cur && !cur.done) R.issues.push(`p${cur.page}: entry without an amount (${cur.d.join(' ')})`); cur = null; };
+
+    for (const p of P) {
+      const hdr = p.lines.find(L => { const t = sq(L.text); return t.includes('date') && t.includes('paidout') && t.includes('balance'); });
+      if (!hdr) continue;
+      const cell = re => hdr.cells.find(c => re.test(sq(c.s)));
+      const cDate = cell(/^date/), cDet = cell(/payment/), cols = [['out', cell(/paidout/)], ['in', cell(/paidin/)], ['bal', cell(/balance/)]];
+      if (!cDate || !cDet || cols.some(c => !c[1])) { R.issues.push(`p${p.n}: header columns not found`); continue; }
+      const left = cDate.x - 4, right = cols[2][1].x1 + 4;
+      let started = false, prevBottom = hdr.y;
+
+      for (const L of p.lines) {
+        if (L.y <= hdr.y + 1) continue;
+        const top = Math.max(L.y - L.h - 1.5, prevBottom);   // a box never reaches into the line above
+        prevBottom = L.y + L.h * 0.35;
+        const t = sq(L.text);
+        const money = [], rest = [];
+        let overdrawn = false;
+        for (const c of L.cells) {
+          if (MONEY.test(c.s) && c.x > cDet.x + 80) {
+            let best = null;
+            for (const [k, h] of cols) if (!best || Math.abs(h.x1 - c.x1) < Math.abs(best[1].x1 - c.x1)) best = [k, h];
+            money.push({ col: best[0], v: pence(c.s) });
+          } else if (/^o?d$/i.test(c.s) && c.x > cols[2][1].x - 10) overdrawn = true;
+          else rest.push(c);
+        }
+        const balCell = money.find(m => m.col === 'bal');
+        const bal = balCell ? balCell.v * (overdrawn ? -1 : 1) : null;
+
+        if (t.includes('balancebroughtforward')) {
+          finish();
+          if (running == null) { running = bal; R.opening = bal; }
+          else if (bal != null && bal !== running) R.issues.push(`p${p.n}: brought forward ${fmt(bal)} but running total is ${fmt(running)}`);
+          started = true; continue;
+        }
+        if (t.includes('balancecarriedforward')) {
+          finish();
+          if (bal != null) { R.closing = bal; if (bal !== running) R.issues.push(`p${p.n}: carried forward ${fmt(bal)} but running total is ${fmt(running)}`); }
+          break;
+        }
+        if (!started) continue;
+
+        for (const c of rest) {
+          const d = c.x1 < cDet.x ? rowDate(c.s) : null;
+          if (d) { date = d; continue; }
+          if (c.x < cDet.x + 10) {                       // payment type column
+            finish();
+            cur = { date, type: c.s, d: [], page: p.n, y0: top, y1: L.y + L.h * 0.35 };
+            continue;
+          }
+          if (!/[A-Za-z0-9]/.test(c.s)) continue;         // stray marks
+          if (!cur || cur.done) { finish(); cur = { date, type: '', d: [], page: p.n, y0: top, y1: L.y + L.h * 0.35 }; }
+          cur.d.push(c.s);
+          cur.y1 = L.y + L.h * 0.35;
+        }
+        for (const m of money) {
+          if (m.col === 'bal') continue;
+          if (!cur || cur.done) { R.issues.push(`p${p.n}: amount ${fmt(m.v)} with no entry`); continue; }
+          if (!cur.date) R.issues.push(`p${p.n}: entry before any date (${cur.d.join(' ')})`);
+          cur.amount = m.col === 'out' ? -m.v : m.v;
+          cur.y1 = L.y + L.h * 0.35;
+          cur.done = true;
+          running = (running || 0) + cur.amount;
+          R.tx.push({ date: cur.date, type: cur.type, d: cur.d, amount: cur.amount, bal: running, page: cur.page,
+            box: [left, cur.y0, right, cur.y1].map(v => Math.round(v * 10) / 10) });
+        }
+        if (bal != null) {
+          const last = R.tx[R.tx.length - 1];
+          if (!last) R.issues.push(`p${p.n}: balance with no entry`);
+          else { last.printed = bal; days.total++; if (bal === running) days.ok++; else R.issues.push(`p${p.n}: printed balance ${fmt(bal)} on ${last.date} but running total is ${fmt(running)}`); }
+        }
+      }
+      finish();
+    }
+
+    const sumIn = R.tx.reduce((a, t) => a + (t.amount > 0 ? t.amount : 0), 0);
+    const sumOut = R.tx.reduce((a, t) => a + (t.amount < 0 ? -t.amount : 0), 0);
+    R.closing = running;
+    R.checks = {
+      dayBalances: days,
+      totalIn: { ok: R.summary.in === sumIn, parsed: sumIn, printed: R.summary.in },
+      totalOut: { ok: R.summary.out === sumOut, parsed: sumOut, printed: R.summary.out },
+      opening: { ok: R.summary.opening === R.opening, parsed: R.opening, printed: R.summary.opening },
+      closing: { ok: R.summary.closing === running, parsed: running, printed: R.summary.closing },
+    };
+    R.ok = !!R.period && R.tx.length > 0 && R.issues.length === 0 && days.ok === days.total
+      && Object.values(R.checks).every(c => c.ok !== false);
+    return R;
+  }
+
+  function csvRows(text) {
+    const rows = []; let row = [], f = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (q) { if (ch === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(f); f = ''; }
+      else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+      else f += ch;
+    }
+    if (f || row.length) { row.push(f); rows.push(row); }
+    return rows;
+  }
+
+  // miData text is fixed-width 18-character blocks (name, then town). HSBC masks payee
+  // names on CR/BP/SO/DR/TFR rows with asterisks; blocks that are only asterisks are dropped.
+  const csvDesc = s => (s.match(/.{1,18}/g) || []).map(b => b.trim()).filter(b => b && !/^\*+$/.test(b));
+
+  // HSBC miData export: newest first, balance after every row.
+  function parseMidataCsv(text) {
+    const R = { kind: 'csv', parser: PARSER_VERSION, from: null, to: null, tx: [], issues: [], checks: {}, ok: false };
+    const rows = csvRows(text.replace(/^﻿/, ''));
+    const hdr = (rows[0] || []).map(h => h.trim().toLowerCase());
+    const iD = hdr.indexOf('date'), iT = hdr.indexOf('type'), iM = hdr.findIndex(h => h.startsWith('merchant') || h.startsWith('description')),
+      iA = hdr.findIndex(h => h.startsWith('debit') || h === 'amount'), iB = hdr.indexOf('balance');
+    if ([iD, iM, iA, iB].some(i => i < 0)) { R.issues.push('not a miData CSV (columns not recognised)'); return R; }
+    for (const r of rows.slice(1)) {
+      let d = (r[iD] || '').trim();
+      const uk = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(d);
+      if (uk) d = `${uk[3]}-${uk[2]}-${uk[1]}`;
+      if (!/^\d{4}-\d\d-\d\d$/.test(d)) continue;
+      const amount = pence(r[iA]), bal = pence(r[iB]);
+      if (amount == null || bal == null) { R.issues.push(`row ${d}: amount or balance unreadable`); continue; }
+      R.tx.push({ date: d, type: iT >= 0 ? (r[iT] || '').trim() : '', d: csvDesc(r[iM] || ''), amount, bal });
+    }
+    R.tx.reverse();
+    const chain = { ok: 0, total: 0 };
+    for (let i = 1; i < R.tx.length; i++) { chain.total++; if (R.tx[i - 1].bal + R.tx[i].amount === R.tx[i].bal) chain.ok++; }
+    R.checks = { chain };
+    if (R.tx.length) { R.from = R.tx[0].date; R.to = R.tx[R.tx.length - 1].date; }
+    R.ok = R.tx.length > 0 && R.issues.length === 0 && chain.ok === chain.total;
+    return R;
+  }
+
+  // One timeline from every statement and CSV. Statement rows win (they carry the PDF position);
+  // a CSV row inside a statement's period is matched to its statement row by (date, amount).
+  // key = date|amount|n is stable whichever source a row came from, so tags survive a CSV row
+  // being replaced by its statement later.
+  function merge(statements, csvs) {
+    const byPeriod = new Map();
+    for (const s of statements) if (s.period && s.tx.length && !byPeriod.has(s.period.from + '|' + s.period.to)) byPeriod.set(s.period.from + '|' + s.period.to, s);
+    const stm = [...byPeriod.values()].sort((a, b) => a.period.from < b.period.from ? -1 : 1);
+    const gaps = [];
+    for (let i = 1; i < stm.length; i++) {
+      const a = stm[i - 1], b = stm[i];
+      if (b.period.from !== addDays(a.period.to, 1)) gaps.push({ kind: 'missing', from: addDays(a.period.to, 1), to: addDays(b.period.from, -1) });
+      else if (b.opening !== a.closing) gaps.push({ kind: 'balance', at: b.period.from, was: a.closing, now: b.opening });
+    }
+
+    const seen = new Set(), crow = [];
+    for (const c of csvs) for (const t of c.tx) {
+      const k = [t.date, t.amount, t.bal, t.d.join('|')].join('#');
+      if (!seen.has(k)) { seen.add(k); crow.push({ ...t, file: c.file }); }
+    }
+    crow.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+
+    const covered = d => stm.some(s => d >= s.period.from && d <= s.period.to);
+    const pdfTx = stm.flatMap(s => s.tx.map(t => ({ ...t, src: 'pdf', file: s.file })));
+    const pool = new Map();
+    for (const t of pdfTx) { const k = t.date + '|' + t.amount; if (!pool.has(k)) pool.set(k, []); pool.get(k).push(t); }
+    let matched = 0, csvOnly = 0;
+    const extra = [];
+    for (const c of crow) {
+      if (!covered(c.date)) { extra.push({ ...c, src: 'csv' }); continue; }
+      const hit = (pool.get(c.date + '|' + c.amount) || []).find(t => !t.csv);
+      if (hit) { hit.csv = true; matched++; }
+      else { csvOnly++; extra.push({ ...c, src: 'csv', flag: 'not on statement' }); }
+    }
+    const cFrom = crow.length ? crow[0].date : null, cTo = crow.length ? crow[crow.length - 1].date : null;
+    const pdfUnmatched = cFrom ? pdfTx.filter(t => !t.csv && t.date >= cFrom && t.date <= cTo).length : 0;
+
+    const all = [...pdfTx.map((t, i) => ({ t, r: 0, i })), ...extra.map((t, i) => ({ t, r: 1, i }))]
+      .sort((a, b) => a.t.date < b.t.date ? -1 : a.t.date > b.t.date ? 1 : a.r - b.r || a.i - b.i).map(o => o.t);
+    const occ = new Map();
+    for (const t of all) { const k = t.date + '|' + t.amount; const n = occ.get(k) || 0; occ.set(k, n + 1); t.key = k + '|' + n; }
+    let breaks = 0;
+    for (let i = 1; i < all.length; i++) if (all[i - 1].bal + all[i].amount !== all[i].bal) breaks++;
+
+    return { tx: all, statements: stm, gaps,
+      stats: { pdfTx: pdfTx.length, csvRows: crow.length, matched, csvOnly, pdfUnmatched, fromCsv: extra.length, breaks,
+        from: all.length ? all[0].date : null, to: all.length ? all[all.length - 1].date : null } };
+  }
+
+  return { PARSER_VERSION, pence, fmt, rowDate, addDays, toLines, pdfToPages, parseHsbcPdf, csvRows, parseMidataCsv, merge };
+})();
+if (typeof module !== 'undefined') module.exports = Core;
+</script>
+
+<!-- ================= APP: storage, state, tiles ================= -->
+<script id="app">
+const STAMP = 'spend-20261019-foundations';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
+const DATA_FILE = 'spending-data.json';
+
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.js';
+
+const ls = {
+  get(k, d) { try { const v = localStorage.getItem('spend.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('spend.' + k, JSON.stringify(v)); } catch (e) {} },
+};
+
+// ---------- IndexedDB (app's own storage on this device) ----------
+const IDB = {
+  _db: null,
+  open() {
+    return this._db || (this._db = new Promise((res, rej) => {
+      const r = indexedDB.open('spending', 1);
+      r.onupgradeneeded = () => { for (const s of ['kv', 'files', 'parsed']) r.result.createObjectStore(s); };
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }));
+  },
+  async run(store, mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => { const tx = db.transaction(store, mode); const r = fn(tx.objectStore(store)); tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); });
+  },
+  get(s, k) { return this.run(s, 'readonly', o => o.get(k)).catch(() => undefined); },
+  put(s, k, v) { return this.run(s, 'readwrite', o => o.put(v, k)).catch(() => undefined); },
+  clear(s) { return this.run(s, 'readwrite', o => o.clear()).catch(() => undefined); },
+};
+
+// ---------- Storage: two drivers, one shape ----------
+// folder: Chrome/Edge read and write the chosen folder directly.
+// copy:   Safari (Mac and iPad) imports the folder into the app's storage; the data file is downloaded to save.
+const FolderDriver = {
+  kind: 'folder', label: 'Folder (read and write)', handle: null, map: new Map(),
+  async restore() {
+    this.handle = await IDB.get('kv', 'dir');
+    if (!this.handle) return 'none';
+    return (await this.handle.queryPermission({ mode: 'readwrite' })) === 'granted' ? 'ready' : 'permission';
+  },
+  async reconnect() { return (await this.handle.requestPermission({ mode: 'readwrite' })) === 'granted'; },
+  async pick() {
+    this.handle = await window.showDirectoryPicker({ id: 'spending', mode: 'readwrite' });
+    await IDB.put('kv', 'dir', this.handle);
+    return true;
+  },
+  folderName() { return this.handle ? this.handle.name : ''; },
+  async list() {
+    const out = [];
+    const walk = async (dir, prefix, depth) => {
+      for await (const [name, h] of dir.entries()) {
+        if (h.kind === 'directory' && depth < 2 && !name.startsWith('.')) await walk(h, prefix + name + '/', depth + 1);
+        else if (h.kind === 'file' && /\.(pdf|csv)$/i.test(name)) { const f = await h.getFile(); out.push({ name: prefix + name, size: f.size, mod: f.lastModified, blob: f }); }
+      }
+    };
+    await walk(this.handle, '', 0);
+    this.map = new Map(out.map(f => [f.name, f.blob]));
+    return out;
+  },
+  async blob(name) { return this.map.get(name); },
+  async readData() { try { const h = await this.handle.getFileHandle(DATA_FILE); return JSON.parse(await (await h.getFile()).text()); } catch (e) { return null; } },
+  async writeData(obj) {
+    const h = await this.handle.getFileHandle(DATA_FILE, { create: true });
+    const w = await h.createWritable(); await w.write(JSON.stringify(obj, null, 1)); await w.close();
+    return false; // nothing left unsaved
+  },
+};
+
+const CopyDriver = {
+  kind: 'copy', label: 'Saved copy (re-choose the folder to add statements)',
+  async restore() { const idx = await IDB.get('kv', 'files'); return idx && idx.length ? 'ready' : 'none'; },
+  pick() {
+    return new Promise(res => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.multiple = true;
+      if ('webkitdirectory' in inp && !/iPad|iPhone|iPod/.test(navigator.userAgent) && !(navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent))) inp.webkitdirectory = true;
+      else inp.accept = '.pdf,.csv,.json';
+      inp.onchange = async () => {
+        const files = [...inp.files];
+        const keep = files.filter(f => /\.(pdf|csv)$/i.test(f.name));
+        await IDB.clear('files');
+        const idx = [];
+        for (const f of keep) {
+          const name = (f.webkitRelativePath || f.name).split('/').slice(1).join('/') || f.name;
+          await IDB.put('files', name, f);
+          idx.push({ name, size: f.size, mod: f.lastModified });
+        }
+        await IDB.put('kv', 'files', idx);
+        await IDB.put('kv', 'folderName', (files[0] && files[0].webkitRelativePath || '').split('/')[0] || 'Chosen files');
+        const df = files.find(f => f.name === DATA_FILE);
+        if (df) {
+          try {
+            const inFolder = JSON.parse(await df.text()), mine = await IDB.get('kv', 'data');
+            if (!mine || (inFolder.savedAt || '') >= (mine.savedAt || '')) { await IDB.put('kv', 'data', inFolder); await IDB.put('kv', 'dirty', false); }
+            else await IDB.put('kv', 'dirty', true);
+          } catch (e) {}
+        }
+        res(true);
+      };
+      inp.oncancel = () => res(false);
+      inp.click();
+    });
+  },
+  _name: '',
+  folderName() { return this._name; },
+  async list() {
+    this._name = (await IDB.get('kv', 'folderName')) || '';
+    const idx = (await IDB.get('kv', 'files')) || [];
+    return Promise.all(idx.map(async f => ({ ...f, blob: await IDB.get('files', f.name) })));
+  },
+  blob(name) { return IDB.get('files', name); },
+  readData() { return IDB.get('kv', 'data').then(d => d || null); },
+  async writeData(obj) { await IDB.put('kv', 'data', obj); await IDB.put('kv', 'dirty', true); return true; },
+  async isDirty() { return !!(await IDB.get('kv', 'dirty')); },
+  async exportData(obj) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' }));
+    a.download = DATA_FILE; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    await IDB.put('kv', 'dirty', false);
+  },
+};
+
+// ?store=copy forces the Safari path in Chrome, to test it.
+const Store = ('showDirectoryPicker' in window) && !/[?&]store=copy\b/.test(location.search) ? FolderDriver : CopyDriver;
+
+// ---------- State: single source of truth; tiles only read it ----------
+const state = {
+  files: [], statements: [], csvs: [], ignored: [], merged: null,
+  data: null,              // spending-data.json (categories, rules, tags, prefs) — used from the next phase
+  dirty: false,
+  view: { desc: ls.get('sortDesc', true), q: '', rows: [], sel: null },
+};
+
+function blankData() { return { version: 1, savedAt: null, categories: [], rules: [], tags: {}, prefs: {} }; }
+
+async function saveData() {
+  state.data.savedAt = new Date().toISOString();
+  state.dirty = await Store.writeData(state.data);
+  paintChrome();
+}
+
+// ---------- Loading ----------
+function progress(f) { $('#progress').style.width = f == null ? '0' : (f * 100).toFixed(1) + '%'; if (f >= 1) setTimeout(() => progress(null), 400); }
+
+async function parseFile(f) {
+  const key = [f.name, f.size, f.mod, Core.PARSER_VERSION].join('|');
+  const cached = await IDB.get('parsed', key);
+  if (cached) return cached;
+  let r;
+  if (/\.csv$/i.test(f.name)) r = Core.parseMidataCsv(await f.blob.text());
+  else {
+    const doc = await pdfjsLib.getDocument({ data: new Uint8Array(await f.blob.arrayBuffer()), verbosity: 0 }).promise;
+    try { r = Core.parseHsbcPdf(await Core.pdfToPages(doc)); } finally { doc.destroy(); }
+  }
+  r.file = f.name;
+  await IDB.put('parsed', key, r);
+  return r;
+}
+
+async function loadAll() {
+  progress(0.02);
+  const files = await Store.list();
+  const statements = [], csvs = [], ignored = [];
+  for (let i = 0; i < files.length; i++) {
+    $('#status').textContent = `Reading ${i + 1} of ${files.length}`;
+    try {
+      const r = await parseFile(files[i]);
+      if (r.kind === 'pdf' && r.period && r.tx.length) statements.push(r);
+      else if (r.kind === 'csv' && r.tx.length) csvs.push(r);
+      else ignored.push({ name: files[i].name, why: r.issues[0] || 'no transactions found' });
+    } catch (e) { ignored.push({ name: files[i].name, why: e.message }); }
+    progress((i + 1) / files.length);
+  }
+  state.files = files; state.statements = statements; state.csvs = csvs; state.ignored = ignored;
+  state.merged = Core.merge(statements, csvs);
+  state.data = (await Store.readData()) || blankData();
+  state.dirty = Store.isDirty ? await Store.isDirty() : false;
+  progress(1);
+  show('tiles');
+  paintChrome();
+  buildRows();
+}
+
+function show(which) {
+  $('#empty').classList.toggle('hidden', which !== 'empty');
+  $('#tiles').classList.toggle('hidden', which !== 'tiles');
+  $('#btnReload').classList.toggle('hidden', which !== 'tiles');
+}
+
+function emptyState(label) {
+  $('#btnStart span').textContent = label;
+  $('#status').textContent = '';
+  show('empty');
+}
+
+function paintChrome() {
+  const s = state.merged && state.merged.stats;
+  const bad = state.statements.some(x => !x.ok) || state.csvs.some(x => !x.ok) || (s && (s.csvOnly || s.pdfUnmatched)) || (state.merged && state.merged.gaps.length);
+  $('#status').textContent = s && s.from ? `${shortDate(s.from)} – ${shortDate(s.to)}` : '';
+  $('#btnSystem').classList.toggle('dot', !!bad);
+  $('#btnSave').classList.toggle('hidden', !(Store.kind === 'copy' && state.dirty));
+}
+
+// ---------- Transactions tile ----------
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const shortDate = iso => `${+iso.slice(8)} ${MONTHS[+iso.slice(5, 7) - 1]} ${iso.slice(2, 4)}`;
+
+function buildRows() {
+  const q = state.view.q.trim().toLowerCase();
+  let rows = state.merged ? state.merged.tx : [];
+  if (q) rows = rows.filter(t => (t.d.join(' ') + ' ' + (TYPES[t.type] || t.type) + ' ' + Core.fmt(t.amount)).toLowerCase().includes(q));
+  if (state.view.desc) rows = rows.slice().reverse();
+  state.view.rows = rows;
+  $('#txCount').textContent = rows.length.toLocaleString('en-GB');
+  $('#sortBtn').textContent = state.view.desc ? 'Date ↓' : 'Date ↑';
+  const list = $('#txList');
+  list.querySelector('.vspace').style.height = rows.length * ROW + 'px';
+  drawRows();
+}
+
+const ROW = 40;
+function drawRows() {
+  const list = $('#txList'), rows = state.view.rows;
+  const start = Math.max(0, Math.floor(list.scrollTop / ROW) - 10);
+  const end = Math.min(rows.length, start + Math.ceil((list.clientHeight || 600) / ROW) + 20);
+  const win = list.querySelector('.vwin');
+  win.style.transform = `translateY(${start * ROW}px)`;
+  let html = '';
+  for (let i = start; i < end; i++) {
+    const t = rows[i];
+    const showDate = i === 0 || rows[i - 1].date !== t.date;
+    const cls = ['row', t.src, t.flag ? 'flag' : '', state.view.sel === t.key ? 'sel' : ''].join(' ');
+    html += `<div class="${cls}" data-i="${i}" title="${esc(t.flag || (t.src === 'pdf' ? 'Show on statement' : 'From CSV'))}">`
+      + `<span class="d">${showDate ? shortDate(t.date) : ''}</span>`
+      + `<span class="desc">${t.d.length ? esc(t.d[0]) : `<span class="none">${esc(TYPES[t.type] || t.type)}</span>`}${t.d.length > 1 ? `<i>${esc(t.d.slice(1).join(' · '))}</i>` : ''}</span>`
+      + `<span class="ty" title="${esc(TYPES[t.type] || t.type)}">${esc(t.type)}</span>`
+      + `<span class="amt ${t.amount > 0 ? 'in' : 'out'}">${Core.fmt(t.amount, true)}</span>`
+      + `<span class="bal">${Core.fmt(t.bal)}</span></div>`;
+  }
+  win.innerHTML = html;
+}
+
+// ---------- PDF panel ----------
+// Pages are laid out (sized) first and the highlight placed at once; drawing happens after,
+// target page first. A draw lost while the app was hidden is retried when it is visible again,
+// so the panel never waits on a draw that will not finish (rAF hidden-tab trap).
+const pdfDocs = new Map();
+async function openPdf(t) {
+  const panel = $('#pdfPanel'), body = $('#pdfBody');
+  panel.classList.add('open'); panel.setAttribute('aria-hidden', 'false');
+  $('#pdfName').textContent = t.file;
+  $('#pdfSub').textContent = `${shortDate(t.date)} · ${t.d[0] || TYPES[t.type] || ''} · ${Core.fmt(t.amount, true)} · page ${t.page}`;
+  if (body.dataset.file !== t.file) {
+    body.dataset.file = t.file; body.innerHTML = '';
+    if (!pdfDocs.has(t.file)) {
+      const blob = await Store.blob(t.file);
+      if (!blob) { toast('That statement is no longer in the folder'); return; }
+      pdfDocs.set(t.file, pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()), verbosity: 0 }).promise);
+    }
+    const doc = await pdfDocs.get(t.file);
+    if (body.dataset.file !== t.file) return;               // another statement was opened meanwhile
+    const cssW = body.clientWidth - 24;
+    for (let n = 1; n <= doc.numPages; n++) {
+      const vp1 = (await doc.getPage(n)).getViewport({ scale: 1 }), s = cssW / vp1.width;
+      const holder = document.createElement('div');
+      holder.className = 'page'; holder.dataset.n = n; holder.dataset.s = s;
+      holder.style.width = cssW + 'px'; holder.style.height = vp1.height * s + 'px';
+      body.appendChild(holder);
+    }
+    drawPages(t.file, t.page);
+  }
+  placeHighlight(t);
+}
+
+async function drawPages(file, first) {
+  const body = $('#pdfBody'), doc = await pdfDocs.get(file);
+  const holders = [...body.querySelectorAll('.page')].sort((a, b) => (+b.dataset.n === first) - (+a.dataset.n === first));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  for (const h of holders) {
+    if (body.dataset.file !== file || h.dataset.done || h.dataset.busy || document.hidden) continue;
+    h.dataset.busy = 1;
+    try {
+      const pg = await doc.getPage(+h.dataset.n), vp = pg.getViewport({ scale: +h.dataset.s * dpr });
+      const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+      const ok = await Promise.race([pg.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise.then(() => true),
+        new Promise(r => setTimeout(() => r(false), 8000))]);
+      if (ok) { h.querySelector('canvas')?.remove(); h.prepend(cv); h.dataset.done = 1; }
+    } catch (e) { /* left undrawn; retried on the next visibility change */ }
+    delete h.dataset.busy;
+  }
+}
+document.addEventListener('visibilitychange', () => { const f = $('#pdfBody').dataset.file; if (!document.hidden && f && pdfDocs.has(f)) drawPages(f, 1); });
+
+function placeHighlight(t) {
+  const body = $('#pdfBody');
+  const holder = body.querySelector(`.page[data-n="${t.page}"]`);
+  if (!holder) return;
+  body.querySelectorAll('.hlbox').forEach(e => e.remove());
+  const s = +holder.dataset.s, [x0, y0, x1, y1] = t.box;
+  const hl = document.createElement('div');
+  hl.className = 'hlbox';
+  Object.assign(hl.style, { left: x0 * s + 'px', top: y0 * s + 'px', width: (x1 - x0) * s + 'px', height: (y1 - y0) * s + 'px' });
+  holder.appendChild(hl);
+  body.scrollTo({ top: holder.offsetTop + y0 * s - body.clientHeight / 2 + 40, behavior: 'smooth' });
+}
+
+function closePdf() { $('#pdfPanel').classList.remove('open'); $('#pdfPanel').setAttribute('aria-hidden', 'true'); }
+
+// ---------- System panel ----------
+const gem = ok => ok ? '🟢' : '🔴';
+const pct = (a, b) => b ? ` (${Math.round(a / b * 1000) / 10}%)` : '';
+function openSystem() {
+  const m = state.merged, s = m && m.stats;
+  let h = `<h3>System</h3><div class="stamp">${STAMP} · parser v${Core.PARSER_VERSION}</div>`;
+  h += `<div class="note">Storage: ${esc(Store.label)}${Store.folderName() ? ' · ' + esc(Store.folderName()) : ''}</div>`;
+  if (m) {
+    h += `<table><tr><th>Statement</th><th class="num">Entries</th><th>Day balances</th><th>Totals</th><th></th></tr>`;
+    for (const st of m.statements) {
+      const c = st.checks;
+      h += `<tr><td>${shortDate(st.period.from)} – ${shortDate(st.period.to)}</td><td class="num">${st.tx.length}</td>`
+        + `<td>${c.dayBalances.ok} of ${c.dayBalances.total}${pct(c.dayBalances.ok, c.dayBalances.total)}</td>`
+        + `<td>${gem(c.totalIn.ok && c.totalOut.ok && c.opening.ok && c.closing.ok)}</td><td>${gem(st.ok)}</td></tr>`;
+      if (st.issues.length) h += `<tr><td colspan="5"><details><summary>${st.issues.length} issue(s)</summary>${st.issues.map(esc).join('<br>')}</details></td></tr>`;
+    }
+    for (const c of state.csvs) h += `<tr><td>CSV ${shortDate(c.from)} – ${shortDate(c.to)}</td><td class="num">${c.tx.length}</td><td>${c.checks.chain.ok} of ${c.checks.chain.total}${pct(c.checks.chain.ok, c.checks.chain.total)}</td><td></td><td>${gem(c.ok)}</td></tr>`;
+    h += `</table><table>`
+      + `<tr><td>Statement entries also in a CSV</td><td class="num">${s.matched}</td><td>${gem(true)}</td></tr>`
+      + `<tr><td>CSV entries missing from their statement</td><td class="num">${s.csvOnly}</td><td>${gem(!s.csvOnly)}</td></tr>`
+      + `<tr><td>Statement entries missing from the CSV</td><td class="num">${s.pdfUnmatched}</td><td>${gem(!s.pdfUnmatched)}</td></tr>`
+      + `<tr><td>Entries only in a CSV (no statement yet)</td><td class="num">${s.fromCsv - s.csvOnly}</td><td></td></tr>`
+      + `<tr><td>Breaks in the running balance</td><td class="num">${s.breaks}</td><td>${gem(s.breaks <= m.gaps.length + (s.csvOnly ? 1 : 0))}</td></tr>`
+      + `</table>`;
+    if (m.gaps.length) h += `<div class="note">Gaps: ${m.gaps.map(g => g.kind === 'missing' ? `no statement ${shortDate(g.from)} – ${shortDate(g.to)}` : `balance jumps at ${shortDate(g.at)}`).join('; ')}</div>`;
+    if (state.ignored.length) h += `<details><summary>${state.ignored.length} file(s) ignored</summary>${state.ignored.map(f => esc(f.name + ' — ' + f.why)).join('<br>')}</details>`;
+  }
+  h += `<div class="btns"><button id="sysPick">Choose folder</button>${Store.kind === 'copy' ? '<button id="sysExport">Download data file</button>' : ''}<button id="sysClose">Close</button></div>`;
+  $('#sysBody').innerHTML = h;
+  $('#sysClose').onclick = () => $('#sysDlg').close();
+  $('#sysPick').onclick = () => { $('#sysDlg').close(); pickFolder(); };
+  if ($('#sysExport')) $('#sysExport').onclick = exportData;
+  $('#sysDlg').showModal();
+}
+
+async function exportData() { await CopyDriver.exportData(state.data); state.dirty = false; paintChrome(); }
+
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600); }
+
+// ---------- Wiring ----------
+async function pickFolder() {
+  try { if (await Store.pick()) { pdfDocs.clear(); $('#pdfBody').dataset.file = ''; await loadAll(); } }
+  catch (e) { if (e.name !== 'AbortError') toast(e.message); }
+}
+
+async function start() {
+  const st = await Store.restore().catch(() => 'none');
+  if (st === 'ready') await loadAll();
+  else if (st === 'permission') emptyState('Reconnect statements folder');
+  else emptyState('Choose statements folder');
+}
+
+$('#btnStart').onclick = async () => {
+  if (Store.kind === 'folder' && Store.handle && $('#btnStart span').textContent.startsWith('Reconnect')) {
+    if (await Store.reconnect()) return loadAll();
+  }
+  pickFolder();
+};
+$('#btnFolder').onclick = pickFolder;
+$('#btnReload').onclick = () => loadAll();
+$('#btnSystem').onclick = openSystem;
+$('#btnSave').onclick = exportData;
+$('#pdfClose').onclick = closePdf;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePdf(); });
+$('#txList').addEventListener('scroll', () => requestAnimationFrame(drawRows), { passive: true });
+window.addEventListener('resize', () => drawRows());
+$('#q').addEventListener('input', e => { state.view.q = e.target.value; $('#txList').scrollTop = 0; buildRows(); });
+$('#sortBtn').onclick = () => { state.view.desc = !state.view.desc; ls.set('sortDesc', state.view.desc); buildRows(); };
+$('#txList').addEventListener('click', e => {
+  const r = e.target.closest('.row'); if (!r) return;
+  const t = state.view.rows[+r.dataset.i];
+  state.view.sel = t.key; drawRows();
+  if (t.src === 'pdf') openPdf(t); else toast(t.flag ? 'In the CSV but not on its statement' : 'From the CSV — no statement for this month yet');
+});
+document.querySelectorAll('.tile').forEach(tile => {
+  const k = 'collapsed.' + tile.dataset.tile;
+  tile.classList.toggle('collapsed', ls.get(k, false));
+  tile.querySelector('.chev').onclick = () => { tile.classList.toggle('collapsed'); ls.set(k, tile.classList.contains('collapsed')); };
+});
+
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+start();
+</script>
+</body>
+</html>

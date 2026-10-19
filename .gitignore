@@ -1,0 +1,9 @@
+# Bank data never enters this repo (it is public). See HANDOVER.md.
+*.pdf
+*.PDF
+*.csv
+*.CSV
+*.json
+!manifest.json
+.DS_Store
+.render/

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Refuse any bank data, even if .gitignore was bypassed with -f.
+bad=$(git diff --cached --name-only --diff-filter=ACMR | grep -iE '\.(pdf|csv)$|spending-data\.json$')
+if [ -n "$bad" ]; then
+  echo "BLOCKED: bank data must never be committed (public repo):"; echo "$bad"; exit 1
+fi
+# Refuse money-looking text from statements in code/docs (sort code + account number pattern).
+if git diff --cached -U0 | grep -E '^\+' | grep -qE '\b[0-9]{6} [0-9]{8}\b'; then
+  echo "BLOCKED: staged text contains a sort code + account number pattern."; exit 1
+fi
