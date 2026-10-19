@@ -1,5 +1,10 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-new-from-sort
+
+- **"+ New category…" at the bottom of every dropdown in Sort payees** (Barry's request). It becomes a name box: Enter creates the category and puts the payee in it (with Undo); Escape cancels.
+- **Checked on the sample:** a new category moved all 95 payments of its payee; Escape created nothing and saved no rule.
+
 ## 2026-10-19 — spend-20261019-payee-detail
 
 - **Barry: is the total money out and in together? "70 ×" reads like 70 equal payments.**
