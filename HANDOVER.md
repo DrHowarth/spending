@@ -27,8 +27,8 @@ git config core.hooksPath .githooks     # once per clone — turns on the bank-d
 node run-tests.js                       # baseline before touching anything
 ```
 
-**Current baseline: 54 of 54 passed (100%)** — 23 need Barry's sample folder; without it they show SKIPPED (not green).
-**Current build stamp: `spend-20261019-self-update`** — the app updates itself to the newest stamp on opening (see CHANGELOG) (System panel, ⓘ top right)
+**Current baseline: 71 of 71 passed (100%)** — 25 need Barry's sample folder; without it they show SKIPPED (not green).
+**Current build stamp: `spend-20261019-categories`** — the app updates itself to the newest stamp on opening (see CHANGELOG) (System panel, ⓘ top right)
 **Live:** https://drhowarth.github.io/spending/
 
 Browser preview (iMac): `preview_start spending` (port 8040). To test with the sample statement, `preview_start
@@ -44,7 +44,7 @@ record defects before fixing → CHANGELOG + stamp → update this queue → com
 
 1. ~~Foundations~~ — shipped `spend-20261019-foundations`.
 2. ~~Timeline~~ — shipped `spend-20261019-timeline`, drag-to-select `spend-20261019-drag-select`. **Both awaiting Barry's Gate 2 in Chrome and Safari** (iPad pinch-zoom unchecked).
-3. **Categories** (Opus) — starter list, one category + optional labels, learned payee rules, savings transfers as their own switchable category, refund pairs in lilac. First real writer of `spending-data.json`.
+3. ~~Categories~~ — shipped `spend-20261019-categories`. Awaiting Barry's Gate 2 (tag his top payees in Chrome and Safari).
 4. **Charts** (Sonnet) — pie by category, monthly bars; click filters the table.
 5. **Repeats and habits** (Opus) — regular payments, frequent habits (coffee), dots for price rises / new subscriptions.
 6. **Calculator** (Opus) — category/payee/word, per day/week/month over a range, sparkline.

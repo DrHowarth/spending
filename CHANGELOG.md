@@ -1,5 +1,22 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-categories
+
+Phase 3: categories.
+- **A category dot on every row.** Click it for the picker: 16 starter categories, "All from <payee>" (on by default, makes a rule), and free labels (shown as #label).
+- **Categories tile:**
+  - "To sort": payees by spend in the current range, each with its guess, a dropdown and a ✓ to keep it.
+  - "Categories": rename, recolour, add.
+- **First guesses:** UK merchant names plus payment types. They cover 996 of 1,451 rows (68.6%) of the sample, checked by reading the top 45 payees' guesses.
+- **Refunds and their payments tinted lilac,** with a switch.
+- **Search** also finds category names and labels.
+- **`spending-data.json` is now really written:** straight to the folder in Chrome; in the app with the orange dot in Safari.
+- **Tests:** 71 of 71 (100%). The 17 new ones cover payee keys, rule order, refunds and payee totals.
+
+Fixed during the build (found by reading the guesses before counting them):
+- SAINSBURYS and MARKS&SPENCER were missed.
+- Fish bar, pizza and "… HEAD" pubs had no rule.
+
 ## 2026-10-19 — spend-20261019-self-update
 
 - **Stale-build guard.** Barry's Safari still showed `spend-20261019-timeline` after ⌥⌘R.

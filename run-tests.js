@@ -94,6 +94,33 @@ const eq = (name, got, want) => {
   eq('paydays: recurring amount, one per month', Core.findPaydays(pay).map(t => t.key), ['p1', 'p2', 'p3', 'p4', 'p5', 'p6']);
   eq('paydays: under 3 months is not pay', Core.findPaydays(pay.filter(t => t.date < '2026-03')).length, 0);
 
+  // categories: payee identity, who decides, refunds, payee totals
+  const k = d => Core.payeeKey({ d });
+  eq('payeeKey store number', k(['TESCO-STORES 6059', 'BARNET']), 'TESCO STORES');
+  eq('payeeKey INT\'L uses line 2', k(["INT'L 0079832565", 'APPLE.COM/BILL', '08001076285']), 'APPLE COM BILL');
+  eq('payeeKey PDF and CSV agree', [k(['Just Eat.Co.UK Ltd', 'London']), k(['JUST EAT.CO.UK LTD', 'LONDON'])], ['JUST EAT CO UK LTD', 'JUST EAT CO UK LTD']);
+  eq('payeeKey asterisks', k(['PAYPAL_*LATYMER UP']), 'PAYPAL LATYMER UP');
+  eq('payeeKey numbers-only line keeps numbers', k(['123456 7654321', 'INTERNET TRANSFER']), '123456 7654321');
+  eq('payeeKey masked', k([]), '');
+  const tx1 = { key: 'a', d: ['COSTA', 'London'], type: ')))', amount: -450 };
+  eq('category: name guess', Core.categoryOf(tx1, {}), { cat: 'coffee', src: 'guess' });
+  eq('category: rule beats guess', Core.categoryOf(tx1, { rules: { COSTA: 'eating' } }), { cat: 'eating', src: 'rule' });
+  eq('category: own tag beats rule', Core.categoryOf(tx1, { rules: { COSTA: 'eating' }, tags: { a: { cat: 'gifts' } } }), { cat: 'gifts', src: 'tag' });
+  eq('category: labels-only tag falls through', Core.categoryOf(tx1, { tags: { a: { labels: ['x'] } } }), { cat: 'coffee', src: 'guess' });
+  eq('category: masked transfer by type', Core.categoryOf({ key: 'b', d: [], type: 'TFR', amount: -100 }, {}), { cat: 'transfers', src: 'guess' });
+  eq('category: unknown', Core.categoryOf({ key: 'c', d: ['YE OLDE MITRE'], type: ')))', amount: -554 }, {}), { cat: null, src: 'none' });
+  eq('category: fish bar is takeaway, not pubs', Core.categoryOf({ key: 'd', d: ['SEVENTEEN FISH BAR'], type: ')))', amount: -1 }, {}).cat, 'takeaway');
+  const R = Core.findRefunds([
+    { key: 'p1', date: '2026-01-01', d: ['SHOP'], amount: -2000 }, { key: 'p2', date: '2026-01-05', d: ['SHOP'], amount: -2000 },
+    { key: 'r1', date: '2026-01-10', d: ['SHOP'], amount: 2000 },                 // refunds the LATEST matching payment
+    { key: 'r2', date: '2026-06-01', d: ['SHOP'], amount: 2000 },                 // p1 is over 90 days old: no pair
+    { key: 'p3', date: '2026-02-01', d: ['OTHER'], amount: -2000 }, { key: 'r3', date: '2026-02-02', d: ['ELSE'], amount: 2000 }]);
+  eq('refunds: latest match, both ways, 90-day limit, same payee', [R.get('r1'), R.get('p2'), R.has('r2'), R.has('r3')], ['p2', 'r1', false, false]);
+  const PS = Core.payeeSummary([
+    { key: 1, d: ['COSTA'], type: ')))', amount: -450 }, { key: 2, d: ['COSTA'], type: ')))', amount: -300 },
+    { key: 3, d: ['WAITROSE'], type: ')))', amount: -5000 }, { key: 4, d: [], type: 'TFR', amount: -9 }], { rules: { WAITROSE: 'other' } });
+  eq('payeeSummary', PS.map(p => [p.key, p.n, p.out, p.cat, p.src]), [['WAITROSE', 1, 5000, 'other', 'rule'], ['COSTA', 2, 750, 'coffee', 'guess']]);
+
   // ---------- Part 2: Barry's real sample (outside the repo) ----------
   // The expected figures are his own money, so they live beside the samples, never here.
   const dir = process.env.SPENDING_SAMPLES || path.join(os.homedir(), 'Documents', 'Bank Things');
@@ -138,6 +165,10 @@ const eq = (name, got, want) => {
     const days = Core.dailyBalances(M3.tx, M3.cover);
     eq('sample daily points', [days.length, days.filter(d => d.bal == null).length], [X.days, 0]);
     eq('sample daily ends on closing balance', days[days.length - 1].bal, M3.tx[M3.tx.length - 1].bal);
+    const bySrc = { tag: 0, rule: 0, guess: 0, none: 0 };
+    for (const t of M3.tx) bySrc[Core.categoryOf(t, {}).src]++;
+    eq('sample first guesses', bySrc.guess, X.guessed);
+    eq('sample refund pairs', Core.findRefunds(M3.tx).size / 2, X.refundPairs);
     const P2 = Core.findPaydays(M3.tx);
     eq('sample paydays', [P2.length, P2.every(t => t.amount === P2[0].amount || Math.abs(t.amount - P2[0].amount) <= P2[0].amount * 0.05)], [X.paydays, true]);
 

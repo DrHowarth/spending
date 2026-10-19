@@ -65,12 +65,33 @@ Descriptions are **fixed-width 18-character blocks** (name, town). HSBC replaces
   - The switch is stored per device in localStorage.
 - Clicking the chart jumps the Transactions list to that day.
 
-## 7. Testing with the real sample in the browser pane
+## 7. Categories
+
+- **Who decides, first match wins (`categoryOf`):**
+  1. the transaction's own tag (`tags[txKey].cat`)
+  2. Barry's payee rule (`rules[payeeKey]`)
+  3. a built-in name guess (`NAME_GUESSES`, UK merchants)
+  4. a type guess (DD → Bills, ATM → Cash, CR → Income, TFR/SO/BP → Transfers)
+  5. none
+
+  Guesses are drawn as faded dots and are never saved. Only Barry's choices go into `spending-data.json`.
+- **`payeeKey`:** the first description line in capitals with only letters and `&` kept, so store numbers and punctuation go. `INT'L` card lines use line 2. A numbers-only line, such as a transfer's sort code and account, keeps its numbers, so two accounts stay separate.
+  - HSBC cuts names to 18 characters in both the PDF and the CSV, so both sources give the same key.
+  - The CSV masks payees on CR/BP/SO/DR/TFR rows. Those have no key, so they can only take a type guess or a per-row tag.
+- **Refunds (`findRefunds`):** a credit pairs with the latest earlier payment to the same payee, for the same amount, within 90 days, at most once. Both rows are tinted lilac; the switch is per device.
+- **"To sort"** lists payees in the timeline's range without a rule, biggest spend first. ✓ turns a guess into a rule.
+- **On the sample:**
+  - The guesses cover 996 of 1,451 rows (68.6%).
+  - There is 1 refund pair (Apple, £20).
+  - The top 50 of 218 card, direct debit and cash-machine payees cover 83% of those payments.
+- **Saving:** every change is saved 400 ms later. The folder driver writes the file; the copy driver saves in IndexedDB and shows the orange dot.
+
+## 8. Testing with the real sample in the browser pane
 
 **ECharts draws only while the browser pane is visible** (show the preview pane first). Start `spending` and `spending-samples`. Then, in the page: fetch the files from `http://localhost:8041/…`, and either `IDB.put('files', …)` plus a `kv/files` index (copy mode, `?store=copy`), or write them into `navigator.storage.getDirectory()` and set `FolderDriver.handle` (folder mode). Then call `loadAll()`.
 **A hidden pane pauses drawing.** Run `drawPages` again once it is visible, and delete the OPFS folder and the `spending` IndexedDB afterwards.
 
-## 8. Build plan
+## 9. Build plan
 
 The plan approved on 19 Oct 2026, one phase per session:
 
