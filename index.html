@@ -538,7 +538,7 @@ if (typeof module !== 'undefined') module.exports = Core;
 
 <!-- ================= APP: storage, state, tiles ================= -->
 <script id="app">
-const STAMP = 'spend-20261019-fresh-load';
+const STAMP = 'spend-20261019-self-update';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
@@ -1073,8 +1073,29 @@ document.querySelectorAll('.tile').forEach(tile => {
   };
 });
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(() => {});
+
+// Stale-build guard. Read the stamp of the copy on the server with cache: 'no-store' (no browser or
+// offline cache can answer). If it is newer than the build that is running, drop the offline cache,
+// refresh the service worker and load the new build once, at a URL no cache has seen.
+// Bank data lives in IndexedDB, which this never touches.
+function liveStamp(html) { return (/const STAMP = '([^']+)'/.exec(html) || [])[1] || null; }
+async function checkForUpdate() {
+  if (location.protocol !== 'https:' || !navigator.onLine) return;
+  try {
+    const live = liveStamp(await (await fetch('./?stamp=' + Date.now(), { cache: 'no-store' })).text());
+    if (!live || live === STAMP || sessionStorage.getItem('spend.updatedTo') === live) return;
+    sessionStorage.setItem('spend.updatedTo', live);
+    if ('caches' in window) for (const k of await caches.keys()) await caches.delete(k);
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+    if (reg) await reg.update().catch(() => {});
+    const u = new URL(location.href); u.searchParams.set('v', live);
+    location.replace(u.toString());
+  } catch (e) { /* offline or blocked: carry on with the build we have */ }
+}
+
 start();
+checkForUpdate();
 </script>
 </body>
 </html>

@@ -28,7 +28,7 @@ node run-tests.js                       # baseline before touching anything
 ```
 
 **Current baseline: 54 of 54 passed (100%)** — 23 need Barry's sample folder; without it they show SKIPPED (not green).
-**Current build stamp: `spend-20261019-fresh-load`** (System panel, ⓘ top right)
+**Current build stamp: `spend-20261019-self-update`** — the app updates itself to the newest stamp on opening (see CHANGELOG) (System panel, ⓘ top right)
 **Live:** https://drhowarth.github.io/spending/
 
 Browser preview (iMac): `preview_start spending` (port 8040). To test with the sample statement, `preview_start

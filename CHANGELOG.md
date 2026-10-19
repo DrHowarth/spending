@@ -1,5 +1,11 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-self-update
+
+- **Stale-build guard.** Barry's Safari still showed `spend-20261019-timeline` after ⌥⌘R.
+  - Cause: the old service worker was still answering. A worker fix only takes effect on the load after the one that installs it.
+  - Fix: on every opening, the app reads the server copy's stamp with `cache: 'no-store'`. If it is newer, the app clears the offline cache, updates the worker and loads the new build once, at a `?v=<stamp>` URL no cache has seen. The worker is also registered with `updateViaCache: 'none'`.
+
 ## 2026-10-19 — spend-20261019-fresh-load
 
 - **Fixed a stale build on reopening.** Barry reopened the app in Safari and got `spend-20261019-timeline` after `drag-select` was live, so drag-to-select seemed broken.
