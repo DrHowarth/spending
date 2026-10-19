@@ -80,7 +80,7 @@ Descriptions are **fixed-width 18-character blocks** (name, town). HSBC replaces
   - Matching is in capitals with punctuation removed, on any line or on all the lines joined.
   - Because HSBC cuts lines at 18 characters, a line of 12 or more characters that is the start of the rule's text also matches, so "Jane Elizabeth Example" catches "JANE ELIZABETH EXA".
   - A rule needs at least 3 letters.
-  - They are managed under Categories → Text rules, with a live "would catch N payments" count, × to remove and Undo. "Sort payees" links there.
+  - They are managed under both Categories tabs (the same list in each), with a live "would catch N payments" count, × to remove and Undo. The "Use a text rule" link in Sort payees scrolls to the box.
 - **`payeeKey`:** the first description line in capitals with only letters and `&` kept, so store numbers and punctuation go. `INT'L` card lines use line 2. A numbers-only line, such as a transfer's sort code and account, keeps its numbers, so two accounts stay separate.
   - HSBC cuts names to 18 characters in both the PDF and the CSV, so both sources give the same key.
   - The CSV masks payees on CR/BP/SO/DR/TFR rows. Those have no key, so they can only take a type guess or a per-row tag.

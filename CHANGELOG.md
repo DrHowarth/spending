@@ -1,5 +1,9 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-rules-both-tabs
+
+- **Text rules now sit under Sort payees as well as Categories** (Barry's request); it is the same list in both. "Use a text rule" scrolls to it without changing tab. A rule added there takes its payees out of the list straight away.
+
 ## 2026-10-19 — spend-20261019-no-example
 
 - The text-rule box no longer shows a real person's name as its example (Barry's request). That name, and the reference lines from his statement, are also gone from the tests and notes; the tests use a made-up name with the same 18-character cut.

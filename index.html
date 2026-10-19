@@ -798,7 +798,7 @@ if (typeof module !== 'undefined') module.exports = Core;
 
 <!-- ================= APP: storage, state, tiles ================= -->
 <script id="app">
-const STAMP = 'spend-20261019-no-example';
+const STAMP = 'spend-20261019-rules-both-tabs';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
@@ -1333,7 +1333,7 @@ function buildCats() {
   document.querySelectorAll('#catTabs button').forEach(b => b.classList.toggle('on', b.dataset.t === state.catView.tab));
   const opts = sel => `<option value="">—</option>` + state.data.categories.map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.name)}</option>`).join('') + `<option value="__new">+ New category…</option>`;
   if (state.catView.tab === 'sort') {
-    if (!todo.length) { body.innerHTML = '<div class="empty-note">Every payee in this range has a category.</div>'; return; }
+    if (!todo.length) { body.innerHTML = '<div class="empty-note">Every payee in this range has a category.</div>' + textRulesHtml(); return; }
     state.catView.subRows = new Map();
     body.innerHTML = `<div class="sort-hint">The app has guessed these payees. ✓ keeps the guess, or pick another. Sorted payees leave this list and stay in their category. Click a payee to see its payments. Same person, different text each time? <button class="linkbtn" id="goTextRules">Use a text rule</button></div>` + todo.slice(0, state.catView.shown).map(p => {
       const c = catById(p.cat), open = state.catView.expanded.has(p.key);
@@ -1343,7 +1343,7 @@ function buildCats() {
         + `<select>${opts(p.cat)}</select>`
         + (c ? `<button class="ok" title="Keep ${esc(c.name)}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg></button>` : '<span></span>')
         + `</div>` + (open ? payeeSubList(p.key, tx) : '');
-    }).join('') + (todo.length > state.catView.shown ? `<button class="more" id="moreBtn">Show more (${todo.length - state.catView.shown} left · ${unsortedRows.toLocaleString('en-GB')} entries unconfirmed)</button>` : '');
+    }).join('') + (todo.length > state.catView.shown ? `<button class="more" id="moreBtn">Show more (${todo.length - state.catView.shown} left · ${unsortedRows.toLocaleString('en-GB')} entries unconfirmed)</button>` : '') + textRulesHtml();
   } else if (state.catView.editing) {
     body.innerHTML = `<div class="chips">${state.data.categories.map(c => `<span class="chip" data-id="${c.id}"><input type="color" value="${c.color}" title="Colour"><input type="text" value="${esc(c.name)}" title="Rename"><button class="del" title="Delete">×</button></span>`).join('')}`
       + `<button class="chip" id="addCat">+ Add</button></div><button class="editbtn" id="editCats">Done</button>`;
@@ -1407,7 +1407,7 @@ $('#catBody').addEventListener('click', e => {
     buildCats(); return;
   }
   if (e.target.closest('#editCats')) { state.catView.editing = !state.catView.editing; buildCats(); return; }
-  if (e.target.closest('#goTextRules')) { state.catView.tab = 'list'; state.catView.editing = false; buildCats(); const i = $('#trText'); i.scrollIntoView({ block: 'center' }); i.focus(); return; }
+  if (e.target.closest('#goTextRules')) { const i = $('#trText'); i.scrollIntoView({ block: 'center' }); i.focus(); return; }
   if (e.target.closest('#trAdd')) {
     const text = $('#trText').value.trim(), cat = $('#trCat').value;
     if (text.length < 3) { toast('Type at least 3 letters'); return; }
