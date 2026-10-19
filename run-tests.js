@@ -119,6 +119,10 @@ const eq = (name, got, want) => {
   const PS = Core.payeeSummary([
     { key: 1, d: ['COSTA'], type: ')))', amount: -450 }, { key: 2, d: ['COSTA'], type: ')))', amount: -300 },
     { key: 3, d: ['WAITROSE'], type: ')))', amount: -5000 }, { key: 4, d: [], type: 'TFR', amount: -9 }], { rules: { WAITROSE: 'other' } });
+  const PS2 = Core.payeeSummary([
+    { key: 1, date: '2026-01-01', d: ['BRITISH GAS'], type: 'DD', amount: -9000 }, { key: 2, date: '2026-02-01', d: ['BRITISH GAS'], type: 'DD', amount: -9000 },
+    { key: 3, date: '2026-03-01', d: ['BRITISH GAS'], type: 'CR', amount: 4000 }], {});
+  eq('payeeSummary: a refund credit last does not make a bill payee income', [PS2[0].cat, PS2[0].src], ['bills', 'guess']);
   eq('payeeSummary', PS.map(p => [p.key, p.n, p.out, p.cat, p.src]), [['WAITROSE', 1, 5000, 'other', 'rule'], ['COSTA', 2, 750, 'coffee', 'guess']]);
 
   // spending charts: money out less refunds; pay and transfers in are not spending; months run through

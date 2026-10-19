@@ -27,8 +27,8 @@ git config core.hooksPath .githooks     # once per clone — turns on the bank-d
 node run-tests.js                       # baseline before touching anything
 ```
 
-**Current baseline: 75 of 75 passed (100%)** — 25 need Barry's sample folder; without it they show SKIPPED (not green).
-**Current build stamp: `spend-20261019-charts`** — the app updates itself to the newest stamp on opening (see CHANGELOG) (System panel, ⓘ top right)
+**Current baseline: 76 of 76 passed (100%)** — 25 need Barry's sample folder; without it they show SKIPPED (not green).
+**Current build stamp: `spend-20261019-sort-undo`** — the app updates itself to the newest stamp on opening (see CHANGELOG) (System panel, ⓘ top right)
 **Live:** https://drhowarth.github.io/spending/
 
 Browser preview (iMac): `preview_start spending` (port 8040). To test with the sample statement, `preview_start

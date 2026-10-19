@@ -199,7 +199,9 @@ dialog::backdrop { background: rgba(20,30,50,.25); }
 .sys details { margin-top: 8px; font-size: 12px; color: var(--muted); }
 
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 9px 14px; border-radius: 10px; font-size: 13px; z-index: 10; opacity: 0; transition: opacity .2s; pointer-events: none; }
-.toast.on { opacity: .94; }
+.toast.on { opacity: .94; pointer-events: auto; }
+.toast button { color: #9fc0ff; font-weight: 600; margin-left: 12px; padding: 0; }
+.sort-hint { color: var(--muted); font-size: 12.5px; padding: 8px 14px 10px; border-top: 1px solid #f1f3f6; }
 </style>
 </head>
 <body>
@@ -253,7 +255,7 @@ dialog::backdrop { background: rgba(20,30,50,.25); }
     <div class="tile-h">
       <button class="chev" title="Collapse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
       <h2>Categories</h2>
-      <div class="tabs" id="catTabs"><button data-t="sort" class="on">To sort <span class="count" id="sortCount"></span></button><button data-t="list">Categories</button></div>
+      <div class="tabs" id="catTabs"><button data-t="sort" class="on">Sort payees <span class="count" id="sortCount"></span></button><button data-t="list">Categories</button></div>
       <span style="margin-left:auto"></span>
       <button class="toggle lilac" id="refundBtn" title="Show refunds in lilac"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
     </div>
@@ -693,17 +695,24 @@ const Core = (() => {
     return pairs;
   }
 
-  // Money out per payee in a range, biggest first, with each payee's current category.
+  // Money out per payee in a range, biggest first. A payee's category is its rule, or else the
+  // guess most of its payments get (not the latest one's: a refund credit would read as income).
   function payeeSummary(tx, data) {
     const by = new Map();
     for (const t of tx) {
       const k = payeeKey(t);
       if (!k) continue;
-      if (!by.has(k)) by.set(k, { key: k, n: 0, out: 0, last: t });
-      const p = by.get(k); p.n++; if (t.amount < 0) p.out -= t.amount; p.last = t;
+      if (!by.has(k)) by.set(k, { key: k, n: 0, out: 0, votes: new Map() });
+      const p = by.get(k); p.n++; if (t.amount < 0) p.out -= t.amount;
+      const c = categoryOf({ ...t, key: null }, { rules: data.rules });
+      const id = (c.cat || '') + '|' + c.src;
+      p.votes.set(id, (p.votes.get(id) || 0) + 1);
     }
-    return [...by.values()].map(p => ({ ...p, ...categoryOf({ ...p.last, key: null }, { rules: data.rules }) }))
-      .sort((a, b) => b.out - a.out || b.n - a.n);
+    return [...by.values()].map(({ votes, ...p }) => {
+      const [id] = [...votes].sort((a, b) => b[1] - a[1] || (a[0].startsWith('|') ? 1 : 0) - (b[0].startsWith('|') ? 1 : 0))[0];
+      const [cat, src] = id.split('|');
+      return { ...p, cat: cat || null, src };
+    }).sort((a, b) => b.out - a.out || b.n - a.n);
   }
 
   // ---------- Spending charts ----------
@@ -747,7 +756,7 @@ if (typeof module !== 'undefined') module.exports = Core;
 
 <!-- ================= APP: storage, state, tiles ================= -->
 <script id="app">
-const STAMP = 'spend-20261019-charts';
+const STAMP = 'spend-20261019-sort-undo';
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TYPES = { ')))': 'Contactless', VIS: 'Card', DD: 'Direct Debit', SO: 'Standing order', TFR: 'Transfer', BP: 'Bill payment', CR: 'Paid in', DR: 'Debit', ATM: 'Cash machine', CHQ: 'Cheque', OBP: 'Online payment' };
@@ -1188,6 +1197,12 @@ function changed() {
   clearTimeout(saveT); saveT = setTimeout(() => saveData().catch(e => toast('Not saved: ' + e.message)), 400);
 }
 
+function ruleWithUndo(key, cat) {
+  const before = state.data.rules[key] || null;
+  setRule(key, cat); changed();
+  const c = catById(cat);
+  toast(`${key} → ${c ? c.name : 'no category'}`, () => { setRule(key, before); changed(); toast(`${key}: undone`); });
+}
 function setRule(key, cat) { if (cat) state.data.rules[key] = cat; else delete state.data.rules[key]; }
 function setTag(txKey, patch) {
   const tag = { ...(state.data.tags[txKey] || {}), ...patch };
@@ -1249,7 +1264,7 @@ function buildCats() {
   const opts = sel => `<option value="">—</option>` + state.data.categories.map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
   if (state.catView.tab === 'sort') {
     if (!todo.length) { body.innerHTML = '<div class="empty-note">Every payee in this range has a category.</div>'; return; }
-    body.innerHTML = todo.slice(0, state.catView.shown).map(p => {
+    body.innerHTML = `<div class="sort-hint">The app has guessed these payees. ✓ keeps the guess, or pick another. Sorted payees leave this list and stay in their category.</div>` + todo.slice(0, state.catView.shown).map(p => {
       const c = catById(p.cat);
       return `<div class="prow" data-k="${esc(p.key)}"><span class="cdot ${c ? 'guess' : 'none'}" style="background:${c ? c.color : 'transparent'}"></span>`
         + `<span class="nm" title="${esc(p.key)}">${esc(p.key)}</span><span class="st">${p.n} × · £${Core.fmt(p.out)}</span>`
@@ -1276,7 +1291,7 @@ function buildCats() {
 }
 $('#catBody').addEventListener('change', e => {
   const row = e.target.closest('.prow');
-  if (row && e.target.tagName === 'SELECT') { setRule(row.dataset.k, e.target.value || null); changed(); return; }
+  if (row && e.target.tagName === 'SELECT') { ruleWithUndo(row.dataset.k, e.target.value || null); return; }
   const chip = e.target.closest('.chip[data-id]');
   if (chip) {
     const c = catById(chip.dataset.id);
@@ -1287,7 +1302,7 @@ $('#catBody').addEventListener('change', e => {
 });
 $('#catBody').addEventListener('click', e => {
   const ok = e.target.closest('.ok');
-  if (ok) { const row = ok.closest('.prow'); setRule(row.dataset.k, row.querySelector('select').value || null); changed(); return; }
+  if (ok) { const row = ok.closest('.prow'); ruleWithUndo(row.dataset.k, row.querySelector('select').value || null); return; }
   if (e.target.closest('#moreBtn')) { state.catView.shown += 12; buildCats(); return; }
   if (e.target.closest('#editCats')) { state.catView.editing = !state.catView.editing; buildCats(); return; }
   const del = e.target.closest('.chip .del');
@@ -1532,7 +1547,11 @@ function openSystem() {
 async function exportData() { await CopyDriver.exportData(state.data); state.dirty = false; paintChrome(); }
 
 let toastT;
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600); }
+function toast(msg, undo) {
+  const t = $('#toast'); t.textContent = msg;
+  if (undo) { const b = document.createElement('button'); b.textContent = 'Undo'; b.onclick = () => { t.classList.remove('on'); undo(); }; t.appendChild(b); }
+  t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), undo ? 6000 : 2600);
+}
 
 // ---------- Wiring ----------
 async function pickFolder() {

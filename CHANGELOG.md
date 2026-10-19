@@ -1,5 +1,12 @@
 # CHANGELOG — Spending
 
+## 2026-10-19 — spend-20261019-sort-undo
+
+- **Barry: "is this a tagging tool? I clicked the green tick and the category disappeared."**
+  - The tab is renamed **Sort payees** and has a one-line hint saying what ✓ does.
+  - Each choice shows "PAYEE → Category" with **Undo**.
+- **Fixed:** the list took a payee's guess from its latest payment. On Barry's data, a British Gas credit made the payee read "Income". It now takes the guess most of the payee's payments get (new test).
+
 ## 2026-10-19 — spend-20261019-charts
 
 Phase 4: charts, plus custom categories (Barry's request).
